@@ -17,6 +17,6 @@ def insertionSort(alist):
      	reward = reward -1
      	print(alist)
 
-alist = [ 7, 4, 2, 5, 3, 6, 1]
+alist = [2, 1, 3, 5, 4, 6, 7]
 insertionSort(alist)
 print(reward)

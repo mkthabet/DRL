@@ -20,7 +20,7 @@ import random, numpy, math, gym
 from keras.models import Sequential, load_model
 from keras.layers import *
 from keras.optimizers import *
-from itemQueue import *
+from toh_env import *
 
 
 class Brain:
@@ -32,7 +32,7 @@ class Brain:
         #self.model.load_weights("cartpole-basic.h5")
 
     def _createModel(self):
-        model = load_model("sort_7.h5")
+        model = load_model("toh_3-3_2.h5")
         return model
 
     def train(self, x, y, epoch=1, verbose=0):
@@ -91,15 +91,16 @@ class Agent:
 
 #-------------------- ENVIRONMENT ---------------------
 class Environment:
-    def __init__(self, num_items):
-        self.env = ItemQueue(num_items)
+    def __init__(self, num_items, num_stacks):
+        self.env = Toh(num_items,num_stacks)
 
     def run(self, agent, inspect = False, init_list = []):
-        s = self.env.reset(init_list)
+        s = self.env.reset()
         R = 0 
         while True:         
-            if inspect: self.env.printState()   
+            if inspect: self.env.printState() 
             a = agent.act(s)
+            print "action", a  
 
             s_, r, done = self.env.step(a)
             
@@ -115,8 +116,9 @@ class Environment:
         print("Total reward:", R)
 
 #-------------------- MAIN ----------------------------
-num_items = 7;
-env = Environment(num_items )
+num_items = 3
+num_stacks = 3
+env = Environment(num_items,num_stacks)
 
 stateCnt  = env.env.getStateSpaceSize()
 actionCnt = env.env.getActSpaceSize()

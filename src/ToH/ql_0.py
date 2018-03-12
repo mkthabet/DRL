@@ -17,10 +17,10 @@
 import random, numpy, math, gym
 
 #-------------------- BRAIN ---------------------------
-from keras.models import Sequential
+from keras.models import Sequential, load_model
 from keras.layers import *
 from keras.optimizers import *
-from itemQueue import *
+from toh_env import *
 
 sortedCnt = 0
 
@@ -33,13 +33,14 @@ class Brain:
         #self.model.load_weights("cartpole-basic.h5")
 
     def _createModel(self):
-        model = Sequential()
-        model.add(Dense(output_dim=512, activation='relu', input_dim=stateCnt))
-        model.add(Dense(output_dim=512, activation='relu'))
-        model.add(Dense(output_dim=actionCnt, activation='linear'))
+        #model = Sequential()
+        #model.add(Dense(output_dim=512, activation='relu', input_dim=stateCnt))
+        #model.add(Dense(output_dim=512, activation='relu'))
+        #model.add(Dense(output_dim=actionCnt, activation='linear'))
+        model = load_model("toh_3-3_4.h5")
 
-        opt = RMSprop(lr=0.00025)
-        model.compile(loss='mse', optimizer=opt)
+       # opt = RMSprop(lr=0.00025)
+       # model.compile(loss='mse', optimizer=opt)
 
         return model
 
@@ -84,9 +85,9 @@ BATCH_SIZE = 64
 
 GAMMA = 0.99
 
-MAX_EPSILON = 1
-MIN_EPSILON = 0.01
-LAMBDA = 0.001      # speed of decay
+MAX_EPSILON = 0.1
+MIN_EPSILON = 0.05
+LAMBDA = 0.0005      # speed of decay
 
 class Agent:
     steps = 0
@@ -145,8 +146,8 @@ class Agent:
 
 #-------------------- ENVIRONMENT ---------------------
 class Environment:
-    def __init__(self, num_items):
-        self.env = ItemQueue(num_items)
+    def __init__(self, num_items, num_stacks):
+        self.env = Toh(num_items, num_stacks)
 
     def run(self, agent, inspect = False):
         s = self.env.reset()
@@ -155,6 +156,7 @@ class Environment:
         while True:         
             if inspect: self.env.printState()   
             a = agent.act(s)
+            #print "action", a
 
             s_, r, done = self.env.step(a)
             
@@ -169,8 +171,9 @@ class Environment:
             R += r
 
             if done:
-                sortedCnt = sortedCnt+1
-                if inspect: self.env.printState()  
+                if inspect: self.env.printState()
+                if R>0:
+                    sortedCnt += 1
                 break
 
             if R<-500:
@@ -184,8 +187,9 @@ class Environment:
         print("Total reward:", R)
 
 #-------------------- MAIN ----------------------------
-num_items = 7;
-env = Environment(num_items)
+num_items = 3
+num_stacks = 3
+env = Environment(num_items,num_stacks)
 
 stateCnt  = env.env.getStateSpaceSize()
 actionCnt = env.env.getActSpaceSize()
@@ -194,9 +198,9 @@ agent = Agent(stateCnt, actionCnt)
 
 try:
     while True:
-        env.run(agent)
-        if sortedCnt == 10000:
+        env.run(agent, inspect=False)
+        if sortedCnt >= 500:
             break
 finally:
-    agent.brain.model.save("sort_7.h5")
-env.run(agent, False)
+    agent.brain.model.save("toh_3-3_2.h5")
+env.run(agent, inspect=True)
