@@ -35,9 +35,9 @@ class Toh:
 			self.stacks[dest_stack,0] = self.stacks[source_stack,0]
 			self.stacks[source_stack,0] = 0.
 			self.stacks[source_stack,:] = np.roll(self.stacks[source_stack,:],-1)
-		else:	#penalize for doing nothing this step
+		#else:	#penalize for doing nothing this step
 			reward = -600
-			#print "Meaningless action"
+			print "Meaningless action"
 			done = 0
 			return self._generateState(), reward, done
 

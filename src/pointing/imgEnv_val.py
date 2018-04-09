@@ -21,28 +21,28 @@ class PointingEnv:
         self.num_items = num_items
         self.act_space_size = self.num_items
         self.b_imgs, self.g_imgs, self.b_only, self.g_only, self.b_hand, self.g_hand = [], [], [], [], [], []
-        for filename in os.listdir('b'):
-            img = cv2.imread(os.path.join('b',filename))
+        for filename in os.listdir('validation/b'):
+            img = cv2.imread(os.path.join('validation/b',filename))
             if img is not None:
                 self.b_imgs.append(processImage(img))
-        for filename in os.listdir('g'):
-            img = cv2.imread(os.path.join('g',filename))
+        for filename in os.listdir('validation/g'):
+            img = cv2.imread(os.path.join('validation/g',filename))
             if img is not None:
                 self.g_imgs.append(processImage(img))
-        for filename in os.listdir('b_only'):
-            img = cv2.imread(os.path.join('b_only', filename))
+        for filename in os.listdir('validation/b_only'):
+            img = cv2.imread(os.path.join('validation/b_only', filename))
             if img is not None:
                 self.b_only.append(processImage(img))
-        for filename in os.listdir('g_only'):
-            img = cv2.imread(os.path.join('g_only', filename))
+        for filename in os.listdir('validation/g_only'):
+            img = cv2.imread(os.path.join('validation/g_only', filename))
             if img is not None:
                 self.g_only.append(processImage(img))
-        for filename in os.listdir('b_hand'):
-            img = cv2.imread(os.path.join('b_hand', filename))
+        for filename in os.listdir('validation/b_hand'):
+            img = cv2.imread(os.path.join('validation/b_hand', filename))
             if img is not None:
                 self.b_hand.append(processImage(img))
-        for filename in os.listdir('g_hand'):
-            img = cv2.imread(os.path.join('g_hand', filename))
+        for filename in os.listdir('validation/g_hand'):
+            img = cv2.imread(os.path.join('validation/g_hand', filename))
             if img is not None:
                 self.g_hand.append(processImage(img))
 

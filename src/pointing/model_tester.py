@@ -17,10 +17,10 @@
 import random, numpy, math, gym
 
 #-------------------- BRAIN ---------------------------
-from keras.models import Sequential
+from keras.models import Sequential, load_model
 from keras.layers import *
 from keras.optimizers import *
-from imgEnv import *
+from imgEnv_val import *
 
 IMAGE_WIDTH = 84
 IMAGE_HEIGHT = 84
@@ -37,17 +37,7 @@ class Brain:
         #self.model.load_weights("cartpole-basic.h5")
 
     def _createModel(self):
-        model = Sequential()
-        model.add(Conv2D(32, (8, 8), strides=(4,4), activation='relu', input_shape=(self.stateCnt), data_format='channels_last'))
-        model.add(Conv2D(64, (4, 4), strides=(2,2), activation='relu'))
-        model.add(Conv2D(64, (3, 3), activation='relu'))
-        model.add(Flatten())
-        model.add(Dense(units=512, activation='relu'))
-
-        model.add(Dense(units=actionCnt, activation='linear'))
-
-        opt = RMSprop(lr=0.00025)
-        model.compile(loss='mse', optimizer=opt)
+        model = load_model("point_3_3.h5")
 
         return model
 
@@ -108,10 +98,7 @@ class Agent:
         self.memory = Memory(MEMORY_CAPACITY)
         
     def act(self, s):
-        if random.random() < self.epsilon:
-            return random.randint(0, self.actionCnt-1)
-        else:
-            return numpy.argmax(self.brain.predictOne(s))
+        return numpy.argmax(self.brain.predictOne(s))
 
     def observe(self, sample):  # in (s, a, r, s_) format
         self.memory.add(sample)        
@@ -158,36 +145,20 @@ class Environment:
 
     def run(self, agent, inspect = False):
         s = self.env.reset()
-        R = 0 
-        global sortedCnt
-        while True:         
-            if inspect: self.env.printState()   
+        R = 0
+        while True:
+            cv2.imshow('test', s)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
             a = agent.act(s)
-
+            print a
             s_, r, done = self.env.step(a)
-            
-
-            if done: # terminal state
-                s_ = None
-
-            agent.observe( (s, a, r, s_) )
-            agent.replay()            
 
             s = s_
             R += r
 
             if done:
-                sortedCnt = sortedCnt+1
-                if inspect: self.env.printState()  
                 break
-
-            if R<-500:
-                #print "Min reward reached. Ending episode"
-                break
-
-            if R<-15:
-                #print "Min reward reached. Ending episode"
-                sortedCnt = 0
 
         print("Total reward:", R)
 
@@ -203,10 +174,6 @@ agent = Agent(stateCnt, actionCnt)
 episodes = 0
 MAX_EPISODES = 1000
 
-try:
-    while episodes < MAX_EPISODES:
-        env.run(agent)
-        episodes = episodes + 1
-finally:
-    agent.brain.model.save("point_3_3.h5")
+env.run(agent)
+    #agent.brain.model.save("point_3.h5")
 #env.run(agent, False)
