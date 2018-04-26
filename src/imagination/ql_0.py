@@ -11,7 +11,7 @@ IMAGE_WIDTH = 84
 IMAGE_HEIGHT = 84
 IMAGE_STACK = 2
 
-ENV_LEARN_START = 200   #number of episodes before training env model starts
+ENV_LEARN_START = 0   #number of episodes before training env model starts
 
 sortedCnt = 0
 
@@ -96,7 +96,7 @@ BATCH_SIZE = 64
 
 GAMMA = 0.99
 
-MAX_EPSILON = 0.5
+MAX_EPSILON = 0.6
 MIN_EPSILON = 0.01
 LAMBDA = 0.001      # speed of decay
 
@@ -198,19 +198,9 @@ class Environment:
             R += r
 
             if done:
-                sortedCnt = sortedCnt+1
-                if inspect: self.env.printState()  
                 break
 
-            if R<-500:
-                #print "Min reward reached. Ending episode"
-                break
-
-            if R<-15:
-                #print "Min reward reached. Ending episode"
-                sortedCnt = 0
-
-        print("Total reward:", R)
+        print("Total reward:", R, ", episode: ", episodes)
 
 #-------------------- MAIN ----------------------------
 num_items = 2;

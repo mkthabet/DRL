@@ -16,7 +16,7 @@ def processImage( img ):
     return rgb
 
 def getDummyImg():
-    filename = 'dummy_img.jpg'
+    filename = 'dummy_img.png'
     img = cv2.imread(os.path.join('dummy', filename))
     return processImage(img)
 
@@ -50,8 +50,8 @@ class PointingEnv:
             if img is not None:
                 self.g_hand.append(processImage(img))
 
-        self.env_model = load_model("models/env_model_2.h5")
-        self.conv_model = load_model("models/conv_model_2.h5")
+        self.env_model = load_model("models/env_model_3.h5")
+        self.conv_model = load_model("models/conv_model_3.h5")
 
         self.s_bar = None
 
@@ -185,7 +185,6 @@ s = testEnv.reset()
 cv2.imshow('test', s)
 cv2.waitKey(0)
 cv2.destroyAllWindows()
-#s_bar = testEnv.get_sbar(img)
 #testEnv.model_reset(getDummyImg())
 testEnv.model_reset(s)
 ip = 0
@@ -195,7 +194,7 @@ while(ip<4 and d == 0):
     s, r, d = testEnv.step(ip)
     s_hat, r_hat, d_hat = testEnv.model_step(ip)
     #print 'mse:  s: ', mse(testEnv.get_sbar(s),s_hat), ', r: ' , mse(r,r_hat) , ', d: ' , mse(d,d_hat)
-    print 'mse:  s: ', mse(testEnv.get_sbar(s), s_hat), ', r: ', r, ', r_hat', r_hat, ', d: ', d, ', d_hat', d_hat
+    print 'mse(s): ', mse(testEnv.get_sbar(s), s_hat), ', r: ', r, ', r_hat', r_hat, ', d: ', d, ', d_hat', d_hat
     cv2.imshow('test', s)
     cv2.waitKey(0)
     cv2.destroyAllWindows()
