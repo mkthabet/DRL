@@ -11,15 +11,15 @@ IMAGE_WIDTH = 84
 IMAGE_HEIGHT = 84
 IMAGE_STACK = 2
 
+ENV_LEARN_START = 200   #number of episodes before training env model starts
+
 sortedCnt = 0
 
 class Brain:
     def __init__(self, stateCnt, actionCnt):
         self.stateCnt = stateCnt
         self.actionCnt = actionCnt
-
         self.model, self.env_model, self.dqn_head_model, self.conv_model = self._createModel()
-        #self.model.load_weights("cartpole-basic.h5")
 
     def _createModel(self):
         img_input = Input(shape = self.stateCnt)
@@ -64,16 +64,9 @@ class Brain:
         self.env_model.fit(x, y, batch_size=32, nb_epoch=epoch, verbose=verbose)
 
     def predict(self, s):
-        # print "shape"
-        # print(s.shape)
-        #print "PREDICT:"
-        #print self.model.predict(s)
         return self.model.predict(s)
 
     def predictOne(self, s):
-        #print("state:", s)
-      #  print " predictone:"
-        #print self.predict(s.reshape(1, self.stateCnt)).flatten()
         return self.predict(s.reshape(1, IMAGE_WIDTH, IMAGE_HEIGHT, 3)).flatten()
 
     def get_s_bar(self, s):
@@ -81,7 +74,7 @@ class Brain:
         
 
 #-------------------- MEMORY --------------------------
-class Memory:   # stored as ( s, a, r, s_ )
+class Memory:   # stored as ( s, a, r, s_ , d)
     samples = []
 
     def __init__(self, capacity):
@@ -173,7 +166,7 @@ class Agent:
 
         self.brain.train(x, y)
 
-        if episodes>100:
+        if episodes>ENV_LEARN_START:
             #print 'expand dims', np.expand_dims(x_env, axis = 0).shape
             self.brain.train_env(np.expand_dims(x_env,axis = 0),np.expand_dims(y_env,axis = 0))
             #self.brain.train_env(x_env, y_env)
@@ -236,8 +229,8 @@ try:
         env.run(agent)
         episodes = episodes + 1
 finally:
-    agent.brain.model.save("models/model_2.h5")
-    agent.brain.env_model.save("models/env_model_2.h5")
-    agent.brain.dqn_head_model.save("models/dqn_head_model_2,h5")
-    agent.brain.conv_model.save("models/conv_model_2.h5")
+    agent.brain.model.save("models/model_3.h5")
+    agent.brain.env_model.save("models/env_model_3.h5")
+    agent.brain.dqn_head_model.save("models/dqn_head_model_3,h5")
+    agent.brain.conv_model.save("models/conv_model_3.h5")
 #env.run(agent, False)

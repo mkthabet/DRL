@@ -50,8 +50,8 @@ class PointingEnv:
             if img is not None:
                 self.g_hand.append(processImage(img))
 
-        self.env_model = load_model("env_model_1.h5")
-        self.conv_model = load_model("conv_model_1.h5")
+        self.env_model = load_model("models/env_model_2.h5")
+        self.conv_model = load_model("models/conv_model_2.h5")
 
         self.s_bar = None
 
