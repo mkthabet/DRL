@@ -2,8 +2,9 @@ import random, numpy, math, gym
 
 #-------------------- BRAIN ---------------------------
 from keras.models import Sequential
-from keras.layers import *
+from keras.layers import Conv2D, Input, Dense, Flatten
 from keras.optimizers import *
+from keras.models import Model
 from imgEnv import *
 
 IMAGE_WIDTH = 84
@@ -17,27 +18,50 @@ class Brain:
         self.stateCnt = stateCnt
         self.actionCnt = actionCnt
 
-        self.model = self._createModel()
+        self.model, self.env_model, self.dqn_head_model, self.conv_model = self._createModel()
         #self.model.load_weights("cartpole-basic.h5")
 
     def _createModel(self):
-        model = Sequential()
-        model.add(Conv2D(32, (8, 8), strides=(4,4), activation='relu', input_shape=(self.stateCnt), data_format='channels_last'))
-        model.add(Conv2D(64, (4, 4), strides=(2,2), activation='relu'))
-        model.add(Conv2D(64, (3, 3), activation='relu'))
-        model.add(Flatten())
-        model.add(Dense(units=512, activation='relu'))
-
-        model.add(Dense(units=actionCnt, activation='linear'))
-
+        img_input = Input(shape = self.stateCnt)
+        conv = Conv2D(32, (8, 8), strides=(4,4), activation='relu', data_format='channels_last')(img_input)
+        conv1 = Conv2D(64, (4, 4), strides=(2,2), activation='relu')(conv)
+        conv2layer = Conv2D(64, (3, 3), activation='relu')
+        conv_out = conv2layer(conv1)
+        conv_out_layer = Flatten()
+        conv_out = conv_out_layer(conv_out)
+        conv_model = Model(img_input, conv_out)
         opt = RMSprop(lr=0.00025)
-        model.compile(loss='mse', optimizer=opt)
+        conv_model.compile(loss='mse', optimizer=opt)
 
-        return model
+        dqn_head_input = Input(shape=conv_out_layer.output_shape)
+        dqn_out = Dense(units=512, activation='relu')(dqn_head_input)
+        dqn_out = Dense(units=actionCnt, activation='linear')(dqn_out)
+        dqn_head_model = Model(inputs=dqn_head_input, outputs=dqn_out)
+        dqn_head_model.compile(loss='mse', optimizer=opt)
+
+        q_out = dqn_head_model(conv_out)
+        dqn_model = Model(img_input,q_out)
+        dqn_model.compile(loss='mse', optimizer=opt)
+
+        #print conv_out_layer.output_shape
+
+        env_in_shape = (conv_out_layer.output_shape[0], conv_out_layer.output_shape[1]+1)
+        env_model_input = Input(shape=env_in_shape, name = 'env_in')
+        print 'env in shape', env_in_shape
+        env_out = Dense(units=512, activation='relu', name = 'env_dense1')(env_model_input)
+        env_out = Dense(units=256, activation='relu', name = 'env_dense2')(env_out)
+        env_out = Dense(units=conv_out_layer.output_shape[1]+2, activation='linear', name = 'env_out')(env_out)
+        env_model = Model(inputs=env_model_input, outputs=env_out)
+        env_model.compile(loss='mse', optimizer=opt)
+
+        return dqn_model, env_model, dqn_head_model, conv_model
 
     def train(self, x, y, epoch=1, verbose=0):
 
         self.model.fit(x, y, batch_size=32, nb_epoch=epoch, verbose=verbose)
+
+    def train_env(self, x, y, epoch=1, verbose=0):
+        self.env_model.fit(x, y, batch_size=32, nb_epoch=epoch, verbose=verbose)
 
     def predict(self, s):
         # print "shape"
@@ -51,6 +75,9 @@ class Brain:
       #  print " predictone:"
         #print self.predict(s.reshape(1, self.stateCnt)).flatten()
         return self.predict(s.reshape(1, IMAGE_WIDTH, IMAGE_HEIGHT, 3)).flatten()
+
+    def get_s_bar(self, s):
+        return self.conv_model.predict(s)
         
 
 #-------------------- MEMORY --------------------------
@@ -97,7 +124,7 @@ class Agent:
         else:
             return numpy.argmax(self.brain.predictOne(s))
 
-    def observe(self, sample):  # in (s, a, r, s_) format
+    def observe(self, sample):  # in (s, a, r, s_, done) format
         self.memory.add(sample)        
 
         # slowly decrease Epsilon based on our eperience
@@ -113,16 +140,24 @@ class Agent:
 
         states = numpy.array([ o[0] for o in batch ])
         states_ = numpy.array([ (no_state if o[3] is None else o[3]) for o in batch ])
+        a_vec = numpy.array([ o[1] for o in batch ])
 
         p = agent.brain.predict(states)
         p_ = agent.brain.predict(states_)
+        s_bar = agent.brain.get_s_bar(states)
+        #print 'sbar' , s_bar.shape
+        s_bar_= agent.brain.get_s_bar(states_)
 
         x = numpy.zeros((len(batch), IMAGE_WIDTH, IMAGE_HEIGHT, 3))
         y = numpy.zeros((len(batch), self.actionCnt))
+
+        x_env = numpy.zeros((len(batch), s_bar.shape[1]+1))
+        #print 'xenv' , x_env.shape
+        y_env = numpy.zeros((len(batch), s_bar.shape[1]+2))
         
         for i in range(batchLen):
             o = batch[i]
-            s = o[0]; a = o[1]; r = o[2]; s_ = o[3]
+            s = o[0]; a = o[1]; r = o[2]; s_ = o[3]; done = o[4]
             
             t = p[i]
             if s_ is None:
@@ -132,8 +167,17 @@ class Agent:
 
             x[i] = s
             y[i] = t
+            #print 'sbar[i]', s_bar[i].shape
+            x_env[i] = np.append(s_bar[i], a)
+            y_env[i] = np.append(s_bar_[i], [r, done])
 
         self.brain.train(x, y)
+
+        if episodes>100:
+            #print 'expand dims', np.expand_dims(x_env, axis = 0).shape
+            self.brain.train_env(np.expand_dims(x_env,axis = 0),np.expand_dims(y_env,axis = 0))
+            #self.brain.train_env(x_env, y_env)
+
 
 #-------------------- ENVIRONMENT ---------------------
 class Environment:
@@ -154,7 +198,7 @@ class Environment:
             if done: # terminal state
                 s_ = None
 
-            agent.observe( (s, a, r, s_) )
+            agent.observe( (s, a, r, s_,done) )
             agent.replay()            
 
             s = s_
@@ -192,5 +236,8 @@ try:
         env.run(agent)
         episodes = episodes + 1
 finally:
-    agent.brain.model.save("point_3_3.h5")
+    agent.brain.model.save("models/model_2.h5")
+    agent.brain.env_model.save("models/env_model_2.h5")
+    agent.brain.dqn_head_model.save("models/dqn_head_model_2,h5")
+    agent.brain.conv_model.save("models/conv_model_2.h5")
 #env.run(agent, False)

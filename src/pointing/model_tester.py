@@ -1,18 +1,4 @@
-# OpenGym CartPole-v0
-# -------------------
-#
-# This code demonstrates use of a basic Q-network (without target network)
-# to solve OpenGym CartPole-v0 problem.
-#
-# Made as part of blog series Let's make a DQN, available at: 
-# https://jaromiru.com/2016/10/03/lets-make-a-dqn-implementation/
-# 
-# author: Jaromir Janisch, 2016
 
-
-#--- enable this to run on GPU
-# import os    
-# os.environ['THEANO_FLAGS'] = "device=gpu,floatX=float32"  
 
 import random, numpy, math, gym
 
