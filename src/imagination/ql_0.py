@@ -11,7 +11,7 @@ IMAGE_WIDTH = 84
 IMAGE_HEIGHT = 84
 IMAGE_STACK = 2
 
-ENV_LEARN_START = 0   #number of episodes before training env model starts
+ENV_LEARN_START = 100   #number of episodes before training env model starts
 
 sortedCnt = 0
 
@@ -19,7 +19,7 @@ class Brain:
     def __init__(self, stateCnt, actionCnt):
         self.stateCnt = stateCnt
         self.actionCnt = actionCnt
-        self.model, self.env_model, self.dqn_head_model, self.conv_model = self._createModel()
+        self.model, self.env_model, self.dqn_head_model, self.conv_model, self.dqn_target = self._createModel()
 
     def _createModel(self):
         img_input = Input(shape = self.stateCnt)
@@ -43,6 +43,9 @@ class Brain:
         dqn_model = Model(img_input,q_out)
         dqn_model.compile(loss='mse', optimizer=opt)
 
+        dqn_target = Model(img_input,q_out)
+        dqn_target.compile(loss='mse', optimizer=opt)
+
         #print conv_out_layer.output_shape
 
         env_in_shape = (conv_out_layer.output_shape[0], conv_out_layer.output_shape[1]+1)
@@ -54,7 +57,7 @@ class Brain:
         env_model = Model(inputs=env_model_input, outputs=env_out)
         env_model.compile(loss='mse', optimizer=opt)
 
-        return dqn_model, env_model, dqn_head_model, conv_model
+        return dqn_model, env_model, dqn_head_model, conv_model, dqn_target
 
     def train(self, x, y, epoch=1, verbose=0):
 
@@ -63,14 +66,20 @@ class Brain:
     def train_env(self, x, y, epoch=1, verbose=0):
         self.env_model.fit(x, y, batch_size=32, nb_epoch=epoch, verbose=verbose)
 
-    def predict(self, s):
-        return self.model.predict(s)
+    def predict(self, s, target=False):
+        if target:
+            return self.dqn_target.predict(s)
+        else:
+            return self.model.predict(s)
 
-    def predictOne(self, s):
-        return self.predict(s.reshape(1, IMAGE_WIDTH, IMAGE_HEIGHT, 3)).flatten()
+    def predictOne(self, s, target=False):
+        return self.predict(s.reshape(1, IMAGE_WIDTH, IMAGE_HEIGHT, 3), target).flatten()
 
     def get_s_bar(self, s):
         return self.conv_model.predict(s)
+
+    def updateTargetModel(self):
+        self.dqn_target.set_weights(self.model.get_weights())
         
 
 #-------------------- MEMORY --------------------------
@@ -100,6 +109,8 @@ MAX_EPSILON = 0.6
 MIN_EPSILON = 0.01
 LAMBDA = 0.001      # speed of decay
 
+UPDATE_TARGET_FREQUENCY = 1000
+
 class Agent:
     steps = 0
     epsilon = MAX_EPSILON
@@ -118,7 +129,10 @@ class Agent:
             return numpy.argmax(self.brain.predictOne(s))
 
     def observe(self, sample):  # in (s, a, r, s_, done) format
-        self.memory.add(sample)        
+        self.memory.add(sample)
+
+        if self.steps % UPDATE_TARGET_FREQUENCY == 0:
+            self.brain.updateTargetModel()
 
         # slowly decrease Epsilon based on our eperience
         self.steps += 1
@@ -136,7 +150,7 @@ class Agent:
         a_vec = numpy.array([ o[1] for o in batch ])
 
         p = agent.brain.predict(states)
-        p_ = agent.brain.predict(states_)
+        p_ = agent.brain.predict(states_, target=True)
         s_bar = agent.brain.get_s_bar(states)
         #print 'sbar' , s_bar.shape
         s_bar_= agent.brain.get_s_bar(states_)
@@ -219,8 +233,8 @@ try:
         env.run(agent)
         episodes = episodes + 1
 finally:
-    agent.brain.model.save("models/model_3.h5")
-    agent.brain.env_model.save("models/env_model_3.h5")
-    agent.brain.dqn_head_model.save("models/dqn_head_model_3,h5")
-    agent.brain.conv_model.save("models/conv_model_3.h5")
+    agent.brain.model.save("models/model_4.h5")
+    agent.brain.env_model.save("models/env_model_4.h5")
+    agent.brain.dqn_head_model.save("models/dqn_head_model_4.h5")
+    agent.brain.conv_model.save("models/conv_model_4.h5")
 #env.run(agent, False)
