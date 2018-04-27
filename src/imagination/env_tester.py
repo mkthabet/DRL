@@ -25,33 +25,34 @@ class PointingEnv:
         self.num_items = num_items
         self.act_space_size = self.num_items
         self.b_imgs, self.g_imgs, self.b_only, self.g_only, self.b_hand, self.g_hand = [], [], [], [], [], []
-        for filename in os.listdir('validation/b'):
-            img = cv2.imread(os.path.join('validation/b',filename))
+        val = 'validation/'     #change to empty string to test on training set
+        for filename in os.listdir(val+'b'):
+            img = cv2.imread(os.path.join(val+'b',filename))
             if img is not None:
                 self.b_imgs.append(processImage(img))
-        for filename in os.listdir('validation/g'):
-            img = cv2.imread(os.path.join('validation/g',filename))
+        for filename in os.listdir(val+'g'):
+            img = cv2.imread(os.path.join(val+'g',filename))
             if img is not None:
                 self.g_imgs.append(processImage(img))
-        for filename in os.listdir('validation/b_only'):
-            img = cv2.imread(os.path.join('validation/b_only', filename))
+        for filename in os.listdir(val+'b_only'):
+            img = cv2.imread(os.path.join(val+'b_only', filename))
             if img is not None:
                 self.b_only.append(processImage(img))
-        for filename in os.listdir('validation/g_only'):
-            img = cv2.imread(os.path.join('validation/g_only', filename))
+        for filename in os.listdir(val+'g_only'):
+            img = cv2.imread(os.path.join(val+'g_only', filename))
             if img is not None:
                 self.g_only.append(processImage(img))
-        for filename in os.listdir('validation/b_hand'):
-            img = cv2.imread(os.path.join('validation/b_hand', filename))
+        for filename in os.listdir(val+'b_hand'):
+            img = cv2.imread(os.path.join(val+'b_hand', filename))
             if img is not None:
                 self.b_hand.append(processImage(img))
-        for filename in os.listdir('validation/g_hand'):
-            img = cv2.imread(os.path.join('validation/g_hand', filename))
+        for filename in os.listdir(val+'g_hand'):
+            img = cv2.imread(os.path.join(val+'g_hand', filename))
             if img is not None:
                 self.g_hand.append(processImage(img))
 
-        self.env_model = load_model("models/env_model_3.h5")
-        self.conv_model = load_model("models/conv_model_3.h5")
+        self.env_model = load_model("models/env_model_2.h5")
+        self.conv_model = load_model("models/conv_model_2.h5")
 
         self.s_bar = None
 
@@ -165,7 +166,7 @@ class PointingEnv:
         return self.conv_model.predict(np.expand_dims(s, axis=0))
 
     def model_reset(self, s_zero):
-        self.s_bar = self.get_sbar(s_zero)
+        self.s_bar = self.get_sbar(s_zero).flatten()
 
     def model_step(self, a):
         #print self.s_bar.shape
@@ -185,7 +186,7 @@ s = testEnv.reset()
 cv2.imshow('test', s)
 cv2.waitKey(0)
 cv2.destroyAllWindows()
-#testEnv.model_reset(getDummyImg())
+#testEnv.model_reset(getDummyImg())0
 testEnv.model_reset(s)
 ip = 0
 d = 0

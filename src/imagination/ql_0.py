@@ -2,7 +2,7 @@ import random, numpy, math, gym
 
 #-------------------- BRAIN ---------------------------
 from keras.models import Sequential
-from keras.layers import Conv2D, Input, Dense, Flatten
+from keras.layers import Conv2D, Input, Dense, Flatten, Dropout
 from keras.optimizers import *
 from keras.models import Model
 from imgEnv import *
@@ -50,8 +50,10 @@ class Brain:
 
         env_in_shape = (conv_out_layer.output_shape[0], conv_out_layer.output_shape[1]+1)
         env_model_input = Input(shape=env_in_shape, name = 'env_in')
-        print 'env in shape', env_in_shape
+        #print 'env in shape', env_in_shape
         env_out = Dense(units=512, activation='relu', name = 'env_dense1')(env_model_input)
+        env_dropout = Dropout(0.3)
+        env_out = env_dropout(env_out)
         env_out = Dense(units=256, activation='relu', name = 'env_dense2')(env_out)
         env_out = Dense(units=conv_out_layer.output_shape[1]+2, activation='linear', name = 'env_out')(env_out)
         env_model = Model(inputs=env_model_input, outputs=env_out)
@@ -109,7 +111,7 @@ MAX_EPSILON = 0.6
 MIN_EPSILON = 0.01
 LAMBDA = 0.001      # speed of decay
 
-UPDATE_TARGET_FREQUENCY = 1000
+UPDATE_TARGET_FREQUENCY = 50
 
 class Agent:
     steps = 0
@@ -233,8 +235,8 @@ try:
         env.run(agent)
         episodes = episodes + 1
 finally:
-    agent.brain.model.save("models/model_4.h5")
-    agent.brain.env_model.save("models/env_model_4.h5")
-    agent.brain.dqn_head_model.save("models/dqn_head_model_4.h5")
-    agent.brain.conv_model.save("models/conv_model_4.h5")
+    agent.brain.model.save("models/model_6.h5")
+    agent.brain.env_model.save("models/env_model_6.h5")
+    agent.brain.dqn_head_model.save("models/dqn_head_model_6.h5")
+    agent.brain.conv_model.save("models/conv_model_6.h5")
 #env.run(agent, False)
