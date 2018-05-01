@@ -51,12 +51,15 @@ class Brain:
         env_in_shape = (conv_out_layer.output_shape[0], conv_out_layer.output_shape[1]+1)
         env_model_input = Input(shape=env_in_shape, name = 'env_in')
         #print 'env in shape', env_in_shape
-        env_out = Dense(units=512, activation='relu', name = 'env_dense1')(env_model_input)
-        env_dropout = Dropout(0.3)
-        env_out = env_dropout(env_out)
-        env_out = Dense(units=256, activation='relu', name = 'env_dense2')(env_out)
+        env_out = Dense(units=1024, activation='relu', name = 'env_dense1')(env_model_input)
+        env_dropout1 = Dropout(0.5)
+        env_out = env_dropout1(env_out)
+        env_out = Dense(units=1024, activation='relu', name = 'env_dense2')(env_out)
+        env_dropout2 = Dropout(0.5)
+        env_out = env_dropout2(env_out)
         env_out = Dense(units=conv_out_layer.output_shape[1]+2, activation='linear', name = 'env_out')(env_out)
         env_model = Model(inputs=env_model_input, outputs=env_out)
+        opt_env = RMSprop(lr=0.0025)
         env_model.compile(loss='mse', optimizer=opt)
 
         return dqn_model, env_model, dqn_head_model, conv_model, dqn_target
@@ -235,8 +238,8 @@ try:
         env.run(agent)
         episodes = episodes + 1
 finally:
-    agent.brain.model.save("models/model_6.h5")
-    agent.brain.env_model.save("models/env_model_6.h5")
-    agent.brain.dqn_head_model.save("models/dqn_head_model_6.h5")
-    agent.brain.conv_model.save("models/conv_model_6.h5")
+    agent.brain.model.save("models/model_9.h5")
+    agent.brain.env_model.save("models/env_model_9.h5")
+    agent.brain.dqn_head_model.save("models/dqn_head_model_9.h5")
+    agent.brain.conv_model.save("models/conv_model_9.h5")
 #env.run(agent, False)

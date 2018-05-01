@@ -53,6 +53,7 @@ class PointingEnv:
 
         self.env_model = load_model("models/env_model_2.h5")
         self.conv_model = load_model("models/conv_model_2.h5")
+        self.dqn_model = load_model('models/model_2.h5')
 
         self.s_bar = None
 
@@ -180,25 +181,37 @@ class PointingEnv:
 
         return self.s_bar, r, done
 
+    def act(self, s):
+        out = self.dqn_model.predict(s.reshape(1, IMAGE_WIDTH, IMAGE_HEIGHT, 3)).flatten()
+        return np.argmax(out)
+
 
 testEnv = PointingEnv()
 s = testEnv.reset()
-cv2.imshow('test', s)
-cv2.waitKey(0)
-cv2.destroyAllWindows()
+#cv2.imshow('test', s)
+#cv2.waitKey(0)
+#cv2.destroyAllWindows()
 #testEnv.model_reset(getDummyImg())0
 testEnv.model_reset(s)
-ip = 0
+#ip = 0
 d = 0
-while(ip<4 and d == 0):
-    ip = int(raw_input('Enter action:'))
-    s, r, d = testEnv.step(ip)
-    s_hat, r_hat, d_hat = testEnv.model_step(ip)
+episodes = 0
+MAX_EPISODES = 50
+log = []
+while(episodes < MAX_EPISODES):
+    if d == 1:
+        episodes = episodes + 1
+        d = 0
+        s = testEnv.reset()
+        testEnv.model_reset(s)
+    a = testEnv.act(s)
+    s, r, d = testEnv.step(a)
+    s_hat, r_hat, d_hat = testEnv.model_step(a)
     #print 'mse:  s: ', mse(testEnv.get_sbar(s),s_hat), ', r: ' , mse(r,r_hat) , ', d: ' , mse(d,d_hat)
     print 'mse(s): ', mse(testEnv.get_sbar(s), s_hat), ', r: ', r, ', r_hat', r_hat, ', d: ', d, ', d_hat', d_hat
-    cv2.imshow('test', s)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    log.append([mse(testEnv.get_sbar(s), s_hat), mse(r, r_hat), mse(d, d_hat)])
+print np.asarray(log).shape
+
 
 
 
