@@ -2,7 +2,7 @@ import random, numpy, math, gym
 
 #-------------------- BRAIN ---------------------------
 from keras.models import Sequential
-from keras.layers import Conv2D, Input, Dense, Flatten, Dropout
+from keras.layers import Conv2D, Input, Dense, Flatten
 from keras.optimizers import *
 from keras.models import Model
 from imgEnv import *
@@ -11,15 +11,15 @@ IMAGE_WIDTH = 84
 IMAGE_HEIGHT = 84
 IMAGE_STACK = 2
 
-ENV_LEARN_START = 100   #number of episodes before training env model starts
-
 sortedCnt = 0
 
 class Brain:
     def __init__(self, stateCnt, actionCnt):
         self.stateCnt = stateCnt
         self.actionCnt = actionCnt
-        self.model, self.env_model, self.dqn_head_model, self.conv_model, self.dqn_target = self._createModel()
+
+        self.model, self.env_model, self.dqn_head_model, self.conv_model = self._createModel()
+        #self.model.load_weights("cartpole-basic.h5")
 
     def _createModel(self):
         img_input = Input(shape = self.stateCnt)
@@ -43,26 +43,18 @@ class Brain:
         dqn_model = Model(img_input,q_out)
         dqn_model.compile(loss='mse', optimizer=opt)
 
-        dqn_target = Model(img_input,q_out)
-        dqn_target.compile(loss='mse', optimizer=opt)
-
         #print conv_out_layer.output_shape
 
         env_in_shape = (conv_out_layer.output_shape[0], conv_out_layer.output_shape[1]+1)
         env_model_input = Input(shape=env_in_shape, name = 'env_in')
-        #print 'env in shape', env_in_shape
+        print 'env in shape', env_in_shape
         env_out = Dense(units=512, activation='relu', name = 'env_dense1')(env_model_input)
-        #env_dropout1 = Dropout(0.5)
-        #env_out = env_dropout1(env_out)
         env_out = Dense(units=256, activation='relu', name = 'env_dense2')(env_out)
-        #env_dropout2 = Dropout(0.5)
-        #env_out = env_dropout2(env_out)
         env_out = Dense(units=conv_out_layer.output_shape[1]+2, activation='linear', name = 'env_out')(env_out)
         env_model = Model(inputs=env_model_input, outputs=env_out)
-        opt_env = RMSprop(lr=0.00025)
         env_model.compile(loss='mse', optimizer=opt)
 
-        return dqn_model, env_model, dqn_head_model, conv_model, dqn_target
+        return dqn_model, env_model, dqn_head_model, conv_model
 
     def train(self, x, y, epoch=1, verbose=0):
 
@@ -71,24 +63,25 @@ class Brain:
     def train_env(self, x, y, epoch=1, verbose=0):
         self.env_model.fit(x, y, batch_size=32, nb_epoch=epoch, verbose=verbose)
 
-    def predict(self, s, target=False):
-        if target:
-            return self.dqn_target.predict(s)
-        else:
-            return self.model.predict(s)
+    def predict(self, s):
+        # print "shape"
+        # print(s.shape)
+        #print "PREDICT:"
+        #print self.model.predict(s)
+        return self.model.predict(s)
 
-    def predictOne(self, s, target=False):
-        return self.predict(s.reshape(1, IMAGE_WIDTH, IMAGE_HEIGHT, 3), target).flatten()
+    def predictOne(self, s):
+        #print("state:", s)
+      #  print " predictone:"
+        #print self.predict(s.reshape(1, self.stateCnt)).flatten()
+        return self.predict(s.reshape(1, IMAGE_WIDTH, IMAGE_HEIGHT, 3)).flatten()
 
     def get_s_bar(self, s):
         return self.conv_model.predict(s)
-
-    def updateTargetModel(self):
-        self.dqn_target.set_weights(self.model.get_weights())
         
 
 #-------------------- MEMORY --------------------------
-class Memory:   # stored as ( s, a, r, s_ , d)
+class Memory:   # stored as ( s, a, r, s_ )
     samples = []
 
     def __init__(self, capacity):
@@ -110,11 +103,9 @@ BATCH_SIZE = 64
 
 GAMMA = 0.99
 
-MAX_EPSILON = 0.6
+MAX_EPSILON = 0.5
 MIN_EPSILON = 0.01
 LAMBDA = 0.001      # speed of decay
-
-UPDATE_TARGET_FREQUENCY = 1
 
 class Agent:
     steps = 0
@@ -134,10 +125,7 @@ class Agent:
             return numpy.argmax(self.brain.predictOne(s))
 
     def observe(self, sample):  # in (s, a, r, s_, done) format
-        self.memory.add(sample)
-
-        #if self.steps % UPDATE_TARGET_FREQUENCY == 0:
-            #self.brain.updateTargetModel()
+        self.memory.add(sample)        
 
         # slowly decrease Epsilon based on our eperience
         self.steps += 1
@@ -155,7 +143,7 @@ class Agent:
         a_vec = numpy.array([ o[1] for o in batch ])
 
         p = agent.brain.predict(states)
-        p_ = agent.brain.predict(states_, target=False)
+        p_ = agent.brain.predict(states_)
         s_bar = agent.brain.get_s_bar(states)
         #print 'sbar' , s_bar.shape
         s_bar_= agent.brain.get_s_bar(states_)
@@ -185,7 +173,7 @@ class Agent:
 
         self.brain.train(x, y)
 
-        if episodes>ENV_LEARN_START:
+        if episodes>100:
             #print 'expand dims', np.expand_dims(x_env, axis = 0).shape
             self.brain.train_env(np.expand_dims(x_env,axis = 0),np.expand_dims(y_env,axis = 0))
             #self.brain.train_env(x_env, y_env)
@@ -217,9 +205,19 @@ class Environment:
             R += r
 
             if done:
+                sortedCnt = sortedCnt+1
+                if inspect: self.env.printState()  
                 break
 
-        print("Total reward:", R, ", episode: ", episodes)
+            if R<-500:
+                #print "Min reward reached. Ending episode"
+                break
+
+            if R<-15:
+                #print "Min reward reached. Ending episode"
+                sortedCnt = 0
+
+        print("Total reward:", R)
 
 #-------------------- MAIN ----------------------------
 num_items = 2;
@@ -238,8 +236,8 @@ try:
         env.run(agent)
         episodes = episodes + 1
 finally:
-    agent.brain.model.save("models/model_10.h5")
-    agent.brain.env_model.save("models/env_model_10.h5")
-    agent.brain.dqn_head_model.save("models/dqn_head_model_10.h5")
-    agent.brain.conv_model.save("models/conv_model_10.h5")
+    agent.brain.model.save("models/model_2.h5")
+    agent.brain.env_model.save("models/env_model_2.h5")
+    agent.brain.dqn_head_model.save("models/dqn_head_model_2,h5")
+    agent.brain.conv_model.save("models/conv_model_2.h5")
 #env.run(agent, False)
