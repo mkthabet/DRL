@@ -3,6 +3,7 @@ import random
 import cv2
 import os
 from keras.models import Model, load_model
+from math import ceil, floor, fabs
 
 IMAGE_WIDTH = 84
 IMAGE_HEIGHT = 84
@@ -25,7 +26,10 @@ class PointingEnv:
         self.num_items = num_items
         self.act_space_size = self.num_items
         self.b_imgs, self.g_imgs, self.b_only, self.g_only, self.b_hand, self.g_hand = [], [], [], [], [], []
-        val = 'validation/'     #change to empty string to test on training set
+        VAL = 1
+        val = 'validation/'
+        if not VAL:
+            val = ''   #change to empty string to test on training set
         for filename in os.listdir(val+'b'):
             img = cv2.imread(os.path.join(val+'b',filename))
             if img is not None:
@@ -198,6 +202,8 @@ d = 0
 episodes = 0
 MAX_EPISODES = 50
 log = []
+misclass_r = 0
+misclass_d = 0
 while(episodes < MAX_EPISODES):
     if d == 1:
         episodes = episodes + 1
@@ -209,8 +215,12 @@ while(episodes < MAX_EPISODES):
     s_hat, r_hat, d_hat = testEnv.model_step(a)
     #print 'mse:  s: ', mse(testEnv.get_sbar(s),s_hat), ', r: ' , mse(r,r_hat) , ', d: ' , mse(d,d_hat)
     print 'mse(s): ', mse(testEnv.get_sbar(s), s_hat), ', r: ', r, ', r_hat', r_hat, ', d: ', d, ', d_hat', d_hat
+    if (round(r)-round(r_hat)) != 0:
+        misclass_r += 1
+    if (round(d)-round(d_hat)) != 0:
+        misclass_d += 1
     log.append([mse(testEnv.get_sbar(s), s_hat), mse(r, r_hat), mse(d, d_hat)])
-print np.asarray(log).shape
+print 'misclass(r) = ', misclass_r, ' , misclass(d) = ', misclass_d
 
 
 
