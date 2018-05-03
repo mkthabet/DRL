@@ -11,7 +11,7 @@ IMAGE_WIDTH = 84
 IMAGE_HEIGHT = 84
 IMAGE_STACK = 2
 
-ENV_LEARN_START = 200   #number of episodes before training env model starts
+ENV_LEARN_START = 500   #number of episodes before training env model starts
 
 sortedCnt = 0
 
@@ -51,15 +51,15 @@ class Brain:
         env_in_shape = (conv_out_layer.output_shape[0], conv_out_layer.output_shape[1]+1)
         env_model_input = Input(shape=env_in_shape, name = 'env_in')
         #print 'env in shape', env_in_shape
-        env_out = Dense(units=512, activation='relu', name = 'env_dense1')(env_model_input)
+        env_out = Dense(units=1024, activation='relu', name = 'env_dense1')(env_model_input)
         #env_dropout1 = Dropout(0.5)
         #env_out = env_dropout1(env_out)
-        env_out = Dense(units=256, activation='relu', name = 'env_dense2')(env_out)
+        env_out = Dense(units=1024, activation='relu', name = 'env_dense2')(env_out)
         #env_dropout2 = Dropout(0.5)
         #env_out = env_dropout2(env_out)
         env_out = Dense(units=conv_out_layer.output_shape[1]+2, activation='linear', name = 'env_out')(env_out)
         env_model = Model(inputs=env_model_input, outputs=env_out)
-        opt_env = RMSprop(lr=0.00025)
+        opt_env = RMSprop(lr=0.0025)
         env_model.compile(loss='mse', optimizer=opt)
 
         return dqn_model, env_model, dqn_head_model, conv_model, dqn_target
@@ -114,7 +114,7 @@ MAX_EPSILON = 0.6
 MIN_EPSILON = 0.01
 LAMBDA = 0.001      # speed of decay
 
-UPDATE_TARGET_FREQUENCY = 100
+UPDATE_TARGET_FREQUENCY = 50
 
 class Agent:
     steps = 0
@@ -136,8 +136,8 @@ class Agent:
     def observe(self, sample):  # in (s, a, r, s_, done) format
         self.memory.add(sample)
 
-        if self.steps % UPDATE_TARGET_FREQUENCY == 0:
-            self.brain.updateTargetModel()
+        #if self.steps % UPDATE_TARGET_FREQUENCY == 0:
+            #self.brain.updateTargetModel()
 
         # slowly decrease Epsilon based on our eperience
         self.steps += 1
@@ -155,7 +155,7 @@ class Agent:
         a_vec = numpy.array([ o[1] for o in batch ])
 
         p = agent.brain.predict(states)
-        p_ = agent.brain.predict(states_, target=True)
+        p_ = agent.brain.predict(states_, target=False)
         s_bar = agent.brain.get_s_bar(states)
         #print 'sbar' , s_bar.shape
         s_bar_= agent.brain.get_s_bar(states_)
@@ -238,8 +238,8 @@ try:
         env.run(agent)
         episodes = episodes + 1
 finally:
-    agent.brain.model.save("models/model_26.h5")
-    agent.brain.env_model.save("models/env_model_26.h5")
-    agent.brain.dqn_head_model.save("models/dqn_head_model_26.h5")
-    agent.brain.conv_model.save("models/conv_model_26.h5")
+    agent.brain.model.save("models/model_25.h5")
+    agent.brain.env_model.save("models/env_model_25.h5")
+    agent.brain.dqn_head_model.save("models/dqn_head_model_25.h5")
+    agent.brain.conv_model.save("models/conv_model_25.h5")
 #env.run(agent, False)

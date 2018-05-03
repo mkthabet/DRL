@@ -19,7 +19,7 @@ class Brain:
     def __init__(self, stateCnt, actionCnt):
         self.stateCnt = stateCnt
         self.actionCnt = actionCnt
-        self.model, self.env_model, self.dqn_head_model, self.conv_model, self.dqn_target = self._createModel()
+        self.model, self.env_model, self.dqn_head_model, self.conv_model, self.dqn_target, self.whole_model = self._createModel()
 
     def _createModel(self):
         img_input = Input(shape = self.stateCnt)
@@ -52,7 +52,7 @@ class Brain:
         env_model_input = Input(shape=env_in_shape, name = 'env_in')
         #print 'env in shape', env_in_shape
         env_out = Dense(units=512, activation='relu', name = 'env_dense1')(env_model_input)
-        #env_dropout1 = Dropout(0.5)
+       # env_dropout1 = Dropout(0.5)
         #env_out = env_dropout1(env_out)
         env_out = Dense(units=256, activation='relu', name = 'env_dense2')(env_out)
         #env_dropout2 = Dropout(0.5)
@@ -62,11 +62,17 @@ class Brain:
         opt_env = RMSprop(lr=0.00025)
         env_model.compile(loss='mse', optimizer=opt)
 
-        return dqn_model, env_model, dqn_head_model, conv_model, dqn_target
+        whole_model = Model(inputs=[img_input, env_model_input], outputs=[q_out, env_out])
+        whole_model.compile(loss='mse', optimizer=opt)
+
+        return dqn_model, env_model, dqn_head_model, conv_model, dqn_target, whole_model
 
     def train(self, x, y, epoch=1, verbose=0):
 
         self.model.fit(x, y, batch_size=32, nb_epoch=epoch, verbose=verbose)
+
+    def train_whole_model(self, x, y, epoch=1, verbose=0):
+        self.whole_model.fit(x, y, batch_size=32, nb_epoch=epoch, verbose=verbose)
 
     def train_env(self, x, y, epoch=1, verbose=0):
         self.env_model.fit(x, y, batch_size=32, nb_epoch=epoch, verbose=verbose)
@@ -114,7 +120,7 @@ MAX_EPSILON = 0.6
 MIN_EPSILON = 0.01
 LAMBDA = 0.001      # speed of decay
 
-UPDATE_TARGET_FREQUENCY = 100
+UPDATE_TARGET_FREQUENCY = 50
 
 class Agent:
     steps = 0
@@ -183,12 +189,15 @@ class Agent:
             x_env[i] = np.append(s_bar[i], a)
             y_env[i] = np.append(s_bar_[i], [r, done])
 
-        self.brain.train(x, y)
 
-        if episodes>ENV_LEARN_START:
+
+        if episodes>MAX_EPISODES:
             #print 'expand dims', np.expand_dims(x_env, axis = 0).shape
-            self.brain.train_env(np.expand_dims(x_env,axis = 0),np.expand_dims(y_env,axis = 0))
+            self.brain.train_whole_model([x,np.expand_dims(x_env,axis = 1)],[y,np.expand_dims(y_env,axis = 1)])
+            #self.brain.train_whole_model([x, x_env], [y, y_env])
             #self.brain.train_env(x_env, y_env)
+        else:
+            self.brain.train(x, y)
 
 
 #-------------------- ENVIRONMENT ---------------------
@@ -238,8 +247,8 @@ try:
         env.run(agent)
         episodes = episodes + 1
 finally:
-    agent.brain.model.save("models/model_26.h5")
-    agent.brain.env_model.save("models/env_model_26.h5")
-    agent.brain.dqn_head_model.save("models/dqn_head_model_26.h5")
-    agent.brain.conv_model.save("models/conv_model_26.h5")
+    agent.brain.model.save("models/model_23.h5")
+    agent.brain.env_model.save("models/env_model_23.h5")
+    agent.brain.dqn_head_model.save("models/dqn_head_model_23.h5")
+    agent.brain.conv_model.save("models/conv_model_23.h5")
 #env.run(agent, False)

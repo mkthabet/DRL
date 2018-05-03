@@ -11,9 +11,7 @@ IMAGE_WIDTH = 84
 IMAGE_HEIGHT = 84
 IMAGE_STACK = 2
 
-ENV_LEARN_START = 200   #number of episodes before training env model starts
-
-sortedCnt = 0
+ENV_LEARN_START = 100   #number of episodes before training env model starts
 
 class Brain:
     def __init__(self, stateCnt, actionCnt):
@@ -29,11 +27,14 @@ class Brain:
         conv_out = conv2layer(conv1)
         conv_out_layer = Flatten()
         conv_out = conv_out_layer(conv_out)
+        conv_out_dense_layer = Dense(units=512, activation='linear', name = 'conv_out_dense')
+        conv_out = conv_out_dense_layer(conv_out)
         conv_model = Model(img_input, conv_out)
         opt = RMSprop(lr=0.00025)
         conv_model.compile(loss='mse', optimizer=opt)
 
-        dqn_head_input = Input(shape=conv_out_layer.output_shape)
+        #dqn_head_input = Input(shape=conv_out_layer.output_shape)
+        dqn_head_input = Input(shape = conv_out_dense_layer.output_shape)
         dqn_out = Dense(units=512, activation='relu')(dqn_head_input)
         dqn_out = Dense(units=actionCnt, activation='linear')(dqn_out)
         dqn_head_model = Model(inputs=dqn_head_input, outputs=dqn_out)
@@ -48,7 +49,8 @@ class Brain:
 
         #print conv_out_layer.output_shape
 
-        env_in_shape = (conv_out_layer.output_shape[0], conv_out_layer.output_shape[1]+1)
+        #env_in_shape = (conv_out_layer.output_shape[0], conv_out_layer.output_shape[1]+1)
+        env_in_shape = (conv_out_dense_layer.output_shape[0], conv_out_dense_layer.output_shape[1] +1)
         env_model_input = Input(shape=env_in_shape, name = 'env_in')
         #print 'env in shape', env_in_shape
         env_out = Dense(units=512, activation='relu', name = 'env_dense1')(env_model_input)
@@ -57,10 +59,10 @@ class Brain:
         env_out = Dense(units=256, activation='relu', name = 'env_dense2')(env_out)
         #env_dropout2 = Dropout(0.5)
         #env_out = env_dropout2(env_out)
-        env_out = Dense(units=conv_out_layer.output_shape[1]+2, activation='linear', name = 'env_out')(env_out)
+        env_out = Dense(units=conv_out_dense_layer.output_shape[1]+2, activation='linear', name = 'env_out')(env_out)
         env_model = Model(inputs=env_model_input, outputs=env_out)
         opt_env = RMSprop(lr=0.00025)
-        env_model.compile(loss='mse', optimizer=opt)
+        env_model.compile(loss='mse', optimizer=opt_env)
 
         return dqn_model, env_model, dqn_head_model, conv_model, dqn_target
 
@@ -114,7 +116,7 @@ MAX_EPSILON = 0.6
 MIN_EPSILON = 0.01
 LAMBDA = 0.001      # speed of decay
 
-UPDATE_TARGET_FREQUENCY = 100
+UPDATE_TARGET_FREQUENCY = 50
 
 class Agent:
     steps = 0
@@ -238,8 +240,8 @@ try:
         env.run(agent)
         episodes = episodes + 1
 finally:
-    agent.brain.model.save("models/model_26.h5")
-    agent.brain.env_model.save("models/env_model_26.h5")
-    agent.brain.dqn_head_model.save("models/dqn_head_model_26.h5")
-    agent.brain.conv_model.save("models/conv_model_26.h5")
+    agent.brain.model.save("models/model_11.h5")
+    agent.brain.env_model.save("models/env_model_11.h5")
+    agent.brain.dqn_head_model.save("models/dqn_head_model_11.h5")
+    agent.brain.conv_model.save("models/conv_model_11.h5")
 #env.run(agent, False)

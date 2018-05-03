@@ -26,7 +26,7 @@ class PointingEnv:
         self.num_items = num_items
         self.act_space_size = self.num_items
         self.b_imgs, self.g_imgs, self.b_only, self.g_only, self.b_hand, self.g_hand = [], [], [], [], [], []
-        VAL = 1
+        VAL = 0
         val = 'validation/'
         if not VAL:
             val = ''   #change to empty string to test on training set
@@ -55,9 +55,9 @@ class PointingEnv:
             if img is not None:
                 self.g_hand.append(processImage(img))
 
-        self.env_model = load_model("models/env_model_2.h5")
-        self.conv_model = load_model("models/conv_model_2.h5")
-        self.dqn_model = load_model('models/model_2.h5')
+        self.env_model = load_model("models/env_model_20.h5")
+        self.conv_model = load_model("models/conv_model_20.h5")
+        self.dqn_model = load_model('models/model_20.h5')
 
         self.s_bar = None
 
@@ -206,6 +206,7 @@ misclass_r = 0
 misclass_d = 0
 while(episodes < MAX_EPISODES):
     if d == 1:
+        #print 'new episode'
         episodes = episodes + 1
         d = 0
         s = testEnv.reset()
