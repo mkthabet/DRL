@@ -18,7 +18,7 @@ sortedCnt = 0
 class EnvironmentModel:
     def __init__(self):
         self.state = None
-        self.model = load_model("models/env_model_26.h5")
+        self.model = load_model("models/env_model_40.h5")
         self.statecnt = self.model.output_shape
 
     def init_model(self,s_bar):
@@ -27,7 +27,7 @@ class EnvironmentModel:
     def step(self,a):
         s_a = np.append(self.state, a)
         # print s_a.shape
-        model_out = self.model.predict(s_a.reshape((1, 1, s_a.size)))
+        model_out = self.model.predict(s_a.reshape((1, s_a.size)))
         model_out = model_out.flatten()
         self.state = model_out[:-2]
         r = model_out[-2]
@@ -52,13 +52,13 @@ class Brain:
         conv_model = Model(img_input, conv_out)
         opt = RMSprop(lr=0.00025)
         conv_model.compile(loss='mse', optimizer=opt)
-        _conv_model = load_model("models/conv_model_26.h5")
+        _conv_model = load_model("models/conv_model_40.h5")
         conv_model.set_weights(_conv_model.get_weights())
         #conv_model.summary()
 
         dqn_head_input = Input(shape=(conv_out_layer.output_shape[1],), name='dqn_head_input')
         dqn_out = Dense(units=512, activation='relu')(dqn_head_input)
-        dqn_out = Dense(units=256, activation='relu')(dqn_out)
+        #dqn_out = Dense(units=256, activation='relu')(dqn_out)
         dqn_out = Dense(units=actionCnt, activation='linear', name='dqn_out')(dqn_out)
         dqn_head_model = Model(inputs=dqn_head_input, outputs=dqn_out)
         dqn_head_model.compile(loss='mse', optimizer=opt)
@@ -200,7 +200,7 @@ class Agent:
         states_ = numpy.array([ (no_state if o[3] is None else o[3]) for o in batch ])
 
         p = agent.brain.predict(states, imaginary = imaginary)
-        p_ = agent.brain.predict(states_, target=True, imaginary = imaginary)
+        p_ = agent.brain.predict(states_, target=False, imaginary = imaginary)
 
         y = numpy.zeros((len(batch), self.actionCnt))
         s_bar, s_bar_, x_env, y_env = None, None, None, None
@@ -260,6 +260,7 @@ class Environment:
             a = agent.act(s, imaginary=imaginary)
             if imaginary:
                 s_, r, done = self.env_model.step(a)
+                r, done = round(r), round(done)
             else:
                 s_, r, done = self.env.step(a)
 
