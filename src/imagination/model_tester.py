@@ -137,7 +137,7 @@ class Environment:
             #cv2.waitKey(0)
             #cv2.destroyAllWindows()
             a = agent.act(s)
-            print a
+            #print a
             s_, r, done = self.env.step(a)
 
             s = s_
@@ -158,8 +158,9 @@ actionCnt = env.env.getActSpaceSize()
 agent = Agent(stateCnt, actionCnt)
 
 episodes = 0
-MAX_EPISODES = 1000
-
-env.run(agent)
+MAX_EPISODES = 50
+while episodes < MAX_EPISODES:
+    env.run(agent)
+    episodes += 1
     #agent.brain.model.save("point_3.h5")
 #env.run(agent, False)
