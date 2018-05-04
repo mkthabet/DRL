@@ -11,7 +11,7 @@ IMAGE_WIDTH = 84
 IMAGE_HEIGHT = 84
 IMAGE_STACK = 2
 
-ENV_LEARN_START = 500   #number of episodes before training env model starts
+ENV_LEARN_START = 200   #number of episodes before training env model starts
 
 sortedCnt = 0
 
@@ -59,7 +59,7 @@ class Brain:
         #env_out = env_dropout2(env_out)
         env_out = Dense(units=conv_out_layer.output_shape[1]+2, activation='linear', name = 'env_out')(env_out)
         env_model = Model(inputs=env_model_input, outputs=env_out)
-        opt_env = RMSprop(lr=0.0025)
+        opt_env = RMSprop(lr=0.00025)
         env_model.compile(loss='mse', optimizer=opt)
 
         return dqn_model, env_model, dqn_head_model, conv_model, dqn_target
@@ -114,7 +114,7 @@ MAX_EPSILON = 0.6
 MIN_EPSILON = 0.01
 LAMBDA = 0.001      # speed of decay
 
-UPDATE_TARGET_FREQUENCY = 50
+UPDATE_TARGET_FREQUENCY = 100
 
 class Agent:
     steps = 0
@@ -155,7 +155,7 @@ class Agent:
         a_vec = numpy.array([ o[1] for o in batch ])
 
         p = agent.brain.predict(states)
-        p_ = agent.brain.predict(states_, target=False)
+        p_ = agent.brain.predict(states_, target=True)
         s_bar = agent.brain.get_s_bar(states)
         #print 'sbar' , s_bar.shape
         s_bar_= agent.brain.get_s_bar(states_)
@@ -238,8 +238,8 @@ try:
         env.run(agent)
         episodes = episodes + 1
 finally:
-    agent.brain.model.save("models/model_25.h5")
-    agent.brain.env_model.save("models/env_model_25.h5")
-    agent.brain.dqn_head_model.save("models/dqn_head_model_25.h5")
-    agent.brain.conv_model.save("models/conv_model_25.h5")
+    agent.brain.model.save("models/model_32.h5")
+    agent.brain.env_model.save("models/env_model_32.h5")
+    agent.brain.dqn_head_model.save("models/dqn_head_model_32.h5")
+    agent.brain.conv_model.save("models/conv_model_32.h5")
 #env.run(agent, False)
