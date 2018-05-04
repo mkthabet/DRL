@@ -6,7 +6,7 @@ import random, numpy, math, gym
 from keras.models import Sequential, load_model
 from keras.layers import *
 from keras.optimizers import *
-from imgEnv_val import *
+from imgEnv import *
 
 IMAGE_WIDTH = 84
 IMAGE_HEIGHT = 84
@@ -23,7 +23,7 @@ class Brain:
         #self.model.load_weights("cartpole-basic.h5")
 
     def _createModel(self):
-        model = load_model("model_1.h5")
+        model = load_model("models/comb_model_100.h5")
 
         return model
 
@@ -133,9 +133,9 @@ class Environment:
         s = self.env.reset()
         R = 0
         while True:
-            cv2.imshow('test', s)
-            cv2.waitKey(0)
-            cv2.destroyAllWindows()
+            #cv2.imshow('test', s)
+            #cv2.waitKey(0)
+            #cv2.destroyAllWindows()
             a = agent.act(s)
             print a
             s_, r, done = self.env.step(a)
