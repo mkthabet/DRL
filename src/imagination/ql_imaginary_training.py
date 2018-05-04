@@ -298,6 +298,6 @@ finally:
     ss=0    #blah blah
     #agent.brain.model.save("models/model_26.h5")
     #agent.brain.env_model.save("models/env_model_26.h5")
-    agent.brain.dqn_head_model.save("models/dqn_head_model_100.h5")
+    agent.brain.model.save("models/comb_model_100.h5")
     #agent.brain.conv_model.save("models/conv_model_26.h5")
 #env.run(agent, False)
