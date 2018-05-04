@@ -4,7 +4,7 @@ import random, numpy, math, gym
 from keras.models import Sequential
 from keras.layers import Conv2D, Input, Dense, Flatten, Dropout
 from keras.optimizers import *
-from keras.models import Model
+from keras.models import Model, model_from_json
 from imgEnv import *
 
 IMAGE_WIDTH = 84
@@ -14,6 +14,9 @@ IMAGE_STACK = 2
 ENV_LEARN_START = 200   #number of episodes before training env model starts
 
 sortedCnt = 0
+
+def mse(x,y):
+    return ((x-y)**2).mean()
 
 class Brain:
     def __init__(self, stateCnt, actionCnt):
@@ -27,29 +30,35 @@ class Brain:
         conv1 = Conv2D(64, (4, 4), strides=(2,2), activation='relu')(conv)
         conv2layer = Conv2D(64, (3, 3), activation='relu')
         conv_out = conv2layer(conv1)
-        conv_out_layer = Flatten()
+        conv_out_layer = Flatten(name='flatten')
         conv_out = conv_out_layer(conv_out)
         conv_model = Model(img_input, conv_out)
         opt = RMSprop(lr=0.00025)
         conv_model.compile(loss='mse', optimizer=opt)
+        #conv_model.summary()
 
-        dqn_head_input = Input(shape=conv_out_layer.output_shape)
+        dqn_head_input = Input(shape=(conv_out_layer.output_shape[1],), name='dqn_head_input')
         dqn_out = Dense(units=512, activation='relu')(dqn_head_input)
         dqn_out = Dense(units=actionCnt, activation='linear')(dqn_out)
         dqn_head_model = Model(inputs=dqn_head_input, outputs=dqn_out)
         dqn_head_model.compile(loss='mse', optimizer=opt)
+        #dqn_head_model.summary()
 
         q_out = dqn_head_model(conv_out)
         dqn_model = Model(img_input,q_out)
         dqn_model.compile(loss='mse', optimizer=opt)
+        #dqn_model.summary()
 
-        dqn_target = Model(img_input,q_out)
-        dqn_target.compile(loss='mse', optimizer=opt)
+        #just copy the architecure
+        json_string = dqn_model.to_json()
+        dqn_target = model_from_json(json_string)
+
+        #dqn_target = Model(img_input,q_out)
+        #dqn_target.compile(loss='mse', optimizer=opt)
 
         #print conv_out_layer.output_shape
 
-        env_in_shape = (conv_out_layer.output_shape[0], conv_out_layer.output_shape[1]+1)
-        env_model_input = Input(shape=env_in_shape, name = 'env_in')
+        env_model_input = Input(shape=(conv_out_layer.output_shape[1]+1,), name = 'env_in')
         #print 'env in shape', env_in_shape
         env_out = Dense(units=512, activation='relu', name = 'env_dense1')(env_model_input)
         #env_dropout1 = Dropout(0.5)
@@ -114,7 +123,7 @@ MAX_EPSILON = 0.6
 MIN_EPSILON = 0.01
 LAMBDA = 0.001      # speed of decay
 
-UPDATE_TARGET_FREQUENCY = 100
+UPDATE_TARGET_FREQUENCY = 80
 
 class Agent:
     steps = 0
@@ -186,9 +195,7 @@ class Agent:
         self.brain.train(x, y)
 
         if episodes>ENV_LEARN_START:
-            #print 'expand dims', np.expand_dims(x_env, axis = 0).shape
-            self.brain.train_env(np.expand_dims(x_env,axis = 0),np.expand_dims(y_env,axis = 0))
-            #self.brain.train_env(x_env, y_env)
+            self.brain.train_env(x_env, y_env)
 
 
 #-------------------- ENVIRONMENT ---------------------
@@ -211,7 +218,8 @@ class Environment:
                 s_ = None
 
             agent.observe( (s, a, r, s_,done) )
-            agent.replay()            
+            agent.replay()
+
 
             s = s_
             R += r
@@ -238,8 +246,9 @@ try:
         env.run(agent)
         episodes = episodes + 1
 finally:
-    agent.brain.model.save("models/model_26.h5")
-    agent.brain.env_model.save("models/env_model_26.h5")
-    agent.brain.dqn_head_model.save("models/dqn_head_model_26.h5")
-    agent.brain.conv_model.save("models/conv_model_26.h5")
+    ss=0
+    #agent.brain.model.save("models/model_31.h5")
+    #agent.brain.env_model.save("models/env_model_31.h5")
+    #agent.brain.dqn_head_model.save("models/dqn_head_model_31.h5")
+    #agent.brain.conv_model.save("models/conv_model_31.h5")
 #env.run(agent, False)
