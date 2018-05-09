@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import os
 import cv2
 from scipy.stats import norm
+import random
 
 from keras.layers import Input, Lambda, Conv2D, Dense, Flatten, Conv2DTranspose, Reshape
 from keras.models import Model
@@ -18,21 +19,21 @@ from keras import backend as K
 from keras import metrics
 from keras.datasets import mnist
 
-batch_size = 100
-latent_dim = 10
-intermediate_dim = 3
-epochs = 400
+batch_size = 50
+latent_dim = 8
+intermediate_dim = 16
+epochs = 50
 epsilon_std = 1.0
 
-IMAGE_WIDTH =84
-IMAGE_HEIGHT = 84
+IMAGE_WIDTH =64
+IMAGE_HEIGHT = 64
 CHANNELS = 3
 original_dim = IMAGE_HEIGHT*IMAGE_WIDTH*CHANNELS
 
 
 def processImage( img ):
     #rgb = None
-    image = cv2.resize(img, (IMAGE_WIDTH, IMAGE_HEIGHT))
+    image = cv2.resize(img, (IMAGE_WIDTH, IMAGE_HEIGHT))/255
     #image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     return image
     #r, g, b = rgb[:,:,0], rgb[:,:,1], rgb[:,:,2]
@@ -69,18 +70,22 @@ def getImages():
     return np.asarray(imgs)
 
 def vae_loss(x, x_decoded_mean):
-    #x= x.flatten()
-    #x_decoded_mean = x_decoded_mean.flatten()
-    xent_loss = original_dim * metrics.binary_crossentropy(x, x_decoded_mean)
+    x= K.batch_flatten(x)
+    x_decoded_mean = K.batch_flatten(x_decoded_mean)
+    xent_loss = K.mean(original_dim*metrics.binary_crossentropy(x, x_decoded_mean), axis= -1)
+    print ('shape = ', K.shape(metrics.binary_crossentropy(x, x_decoded_mean)))
     kl_loss = - 0.5 * K.sum(1 + z_log_var - K.square(z_mean) - K.exp(z_log_var), axis=-1)
-    return K.mean(xent_loss + kl_loss)
+    print('shape = ', kl_loss)
+    return xent_loss + kl_loss
+    #return K.mean((xent_loss)+ kl_loss)
 
 
 img_input = Input(shape=(IMAGE_WIDTH, IMAGE_HEIGHT, CHANNELS))
-conv = Conv2D(32, (8, 8), strides=(4, 4), activation='relu', data_format='channels_last')(img_input)
-conv1 = Conv2D(64, (4, 4), strides=(2, 2), activation='relu')(conv)
-conv2layer = Conv2D(64, (3, 3), activation='relu')
-conv_out = conv2layer(conv1)
+conv = Conv2D(32, (4, 4), strides=(2, 2), activation='relu', data_format='channels_last')(img_input)
+conv = Conv2D(64, (4, 4), strides=(2, 2), activation='relu')(conv)
+conv = Conv2D(128, (4, 4), strides=(2, 2), activation='relu')(conv)
+conv2layer = Conv2D(256, (4, 4), activation='relu')
+conv_out = conv2layer(conv)
 conv_out_layer = Flatten(name='flatten')
 h = conv_out_layer(conv_out)
 z_mean = Dense(units=latent_dim)(h)
@@ -100,11 +105,12 @@ print(conv2layer.output_shape[1:])
 
 
 decoder_input = Input(shape=(latent_dim,))
-h_decoded = Dense(units=conv_out_layer.output_shape[1], activation='relu')(decoder_input)
-h_decoded = Reshape(conv2layer.output_shape[1:])(h_decoded)
-deconv = Conv2DTranspose(64, (3, 3), activation='relu')(h_decoded)
-deconv = Conv2DTranspose(64, (4, 4), strides= (2,2), activation='relu')(deconv)
-decoded_mean = Conv2DTranspose(3, (8, 8), strides= (4,4), activation='sigmoid')(deconv)
+h_decoded = Dense(units=1024, activation='relu')(decoder_input)
+h_decoded = Reshape((1, 1, 1024))(h_decoded)
+deconv = Conv2DTranspose(128, (5, 5), strides= (2,2), activation='relu')(h_decoded)
+deconv = Conv2DTranspose(64, (5, 5), strides= (2,2), activation='relu')(deconv)
+deconv = Conv2DTranspose(32, (6, 6), strides= (2,2), activation='relu')(deconv)
+decoded_mean = Conv2DTranspose(3, (6, 6), strides= (2,2), activation='sigmoid')(deconv)
 
 encoder = Model(img_input, z_mean, name='encoder')
 decoder = Model(decoder_input, decoded_mean, name='decoder')
@@ -112,7 +118,7 @@ decoder.summary()
 reconstructed = decoder(z)
 vae = Model(img_input, reconstructed, name= 'vae')
 opt = RMSprop(lr=0.00025)
-vae.compile(optimizer=opt, loss='mse')
+vae.compile(optimizer=opt, loss=vae_loss)
 vae.summary()
 
 # we instantiate these layers separately so as to reuse them later
@@ -142,12 +148,16 @@ x_train = y_train = x_test = y_test = getImages()
 #x_test = x_test.astype('float32') / 255.
 #x_train = x_train.reshape((len(x_train), np.prod(x_train.shape[1:])))
 #x_test = x_test.reshape((len(x_test), np.prod(x_test.shape[1:])))
-
-vae.fit(x_train, x_train,
-        shuffle=True,
-        epochs=epochs,
-        batch_size=batch_size,
-        validation_data=(x_test, x_test))
+try:
+    vae.fit(x_train, x_train,
+            shuffle=True,
+            epochs=epochs,
+            batch_size=batch_size,
+            validation_data=(x_test, x_test))
+finally:
+    encoder.save('models/encoder_01.h5')
+    decoder.save('models/decoder_01.h5')
+    vae.save('models/vae_01.h5')
 
 # build a model to project inputs on the latent space
 #encoder = Model(x, z_mean)
@@ -166,22 +176,23 @@ vae.fit(x_train, x_train,
 #generator = Model(decoder_input, _x_decoded_mean)
 
 # display a 2D manifold of the digits
-#n = 15  # figure with 15x15 digits
-#digit_size = 28
-#figure = np.zeros((digit_size * n, digit_size * n))
+n = 15  # figure with 15x15 digits
+digit_size = 64
+figure = np.zeros((digit_size * n, digit_size * n, 3))
 # linearly spaced coordinates on the unit square were transformed through the inverse CDF (ppf) of the Gaussian
 # to produce values of the latent variables z, since the prior of the latent space is Gaussian
-#grid_x = norm.ppf(np.linspace(0.05, 0.95, n))
-#grid_y = norm.ppf(np.linspace(0.05, 0.95, n))
+grid_x = norm.ppf(np.linspace(0.05, 0.95, n))
+grid_y = norm.ppf(np.linspace(0.05, 0.95, n))
 
-#for i, yi in enumerate(grid_x):
-#    for j, xi in enumerate(grid_y):
-#        z_sample = np.array([[xi, yi, xi, yi]])
-#        x_decoded = generator.predict(z_sample)
-#        digit = x_decoded[0].reshape(digit_size, digit_size)
-#        figure[i * digit_size: (i + 1) * digit_size,
-#               j * digit_size: (j + 1) * digit_size] = digit
+for i, yi in enumerate(grid_x):
+    for j, xi in enumerate(grid_y):
+        #z_sample = np.array([[xi, yi, xi, yi]])
+        z_sample = np.random.normal(0, 1, (1, latent_dim))
+        x_decoded = decoder.predict(z_sample)
+        digit = x_decoded[0].reshape(digit_size, digit_size, 3)*255
+        figure[i * digit_size: (i + 1) * digit_size,
+               j * digit_size: (j + 1) * digit_size, :] = digit
 
-#plt.figure(figsize=(10, 10))
-#plt.imshow(figure, cmap='Greys_r')
-#plt.show()
+plt.figure(figsize=(10, 10))
+plt.imshow(figure, cmap='Greys_r')
+plt.show()
