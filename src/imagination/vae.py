@@ -19,9 +19,9 @@ from keras import backend as K
 from keras import metrics
 from keras.datasets import mnist
 
-batch_size = 50
-latent_dim = 8
-intermediate_dim = 16
+batch_size = 30
+latent_dim = 3
+intermediate_dim = 8
 epochs = 50
 epsilon_std = 1.0
 
@@ -33,8 +33,12 @@ original_dim = IMAGE_HEIGHT*IMAGE_WIDTH*CHANNELS
 
 def processImage( img ):
     #rgb = None
-    image = cv2.resize(img, (IMAGE_WIDTH, IMAGE_HEIGHT))/255
+    image = cv2.resize(img, (IMAGE_WIDTH, IMAGE_HEIGHT))
+    image = image.astype(float)/255
+    #print(np.max(image))
     #image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    #i = plt.imshow(image)
+    #plt.show()
     return image
     #r, g, b = rgb[:,:,0], rgb[:,:,1], rgb[:,:,2]
     #gray = 0.2989 * r + 0.5870 * g + 0.1140 * b     # extract luminance
@@ -72,11 +76,11 @@ def getImages():
 def vae_loss(x, x_decoded_mean):
     x= K.batch_flatten(x)
     x_decoded_mean = K.batch_flatten(x_decoded_mean)
-    xent_loss = K.mean(original_dim*metrics.binary_crossentropy(x, x_decoded_mean), axis= -1)
-    print ('shape = ', K.shape(metrics.binary_crossentropy(x, x_decoded_mean)))
+    xent_loss = metrics.binary_crossentropy(x, x_decoded_mean)
+    #print ('shape = ', K.shape(metrics.binary_crossentropy(x, x_decoded_mean)))
     kl_loss = - 0.5 * K.sum(1 + z_log_var - K.square(z_mean) - K.exp(z_log_var), axis=-1)
-    print('shape = ', kl_loss)
-    return xent_loss + kl_loss
+    #print('shape = ', kl_loss)
+    return K.mean(xent_loss + kl_loss)
     #return K.mean((xent_loss)+ kl_loss)
 
 
@@ -116,7 +120,7 @@ encoder = Model(img_input, z_mean, name='encoder')
 decoder = Model(decoder_input, decoded_mean, name='decoder')
 decoder.summary()
 reconstructed = decoder(z)
-vae = Model(img_input, reconstructed, name= 'vae')
+vae = Model(img_input, reconstructed, name='vae')
 opt = RMSprop(lr=0.00025)
 vae.compile(optimizer=opt, loss=vae_loss)
 vae.summary()
@@ -189,7 +193,7 @@ for i, yi in enumerate(grid_x):
         #z_sample = np.array([[xi, yi, xi, yi]])
         z_sample = np.random.normal(0, 1, (1, latent_dim))
         x_decoded = decoder.predict(z_sample)
-        digit = x_decoded[0].reshape(digit_size, digit_size, 3)*255
+        digit = x_decoded[0].reshape(digit_size, digit_size, 3)
         figure[i * digit_size: (i + 1) * digit_size,
                j * digit_size: (j + 1) * digit_size, :] = digit
 
