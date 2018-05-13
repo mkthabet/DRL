@@ -21,7 +21,7 @@ from keras import metrics
 from keras.datasets import mnist
 
 batch_size = 50
-latent_dim = 4
+latent_dim = 3
 intermediate_dim = 16
 epochs = 50
 epsilon_std = 1.0
@@ -39,46 +39,54 @@ def processImage( img ):
 
 
 def getImages():
+     VAL = 0
+     val = 'validation/'
+     if not VAL:
+        val = ''  # change to empty string to test on training set
      imgs= []
-     for filename in os.listdir('b'):
-         img = cv2.imread(os.path.join('b', filename))
+     for filename in os.listdir(val+'b'):
+         img = cv2.imread(os.path.join(val+'b', filename))
          if img is not None:
              imgs.append(processImage(img))
-     for filename in os.listdir('g'):
-         img = cv2.imread(os.path.join('g', filename))
+     for filename in os.listdir(val+'g'):
+         img = cv2.imread(os.path.join(val+'g', filename))
          if img is not None:
              imgs.append(processImage(img))
-     for filename in os.listdir('b_only'):
-         img = cv2.imread(os.path.join('b_only', filename))
+     for filename in os.listdir(val+'b_only'):
+         img = cv2.imread(os.path.join(val+'b_only', filename))
          if img is not None:
              imgs.append(processImage(img))
-     for filename in os.listdir('g_only'):
-         img = cv2.imread(os.path.join('g_only', filename))
+     for filename in os.listdir(val+'g_only'):
+         img = cv2.imread(os.path.join(val+'g_only', filename))
          if img is not None:
              imgs.append(processImage(img))
-     for filename in os.listdir('b_hand'):
-         img = cv2.imread(os.path.join('b_hand', filename))
+     for filename in os.listdir(val+'b_hand'):
+         img = cv2.imread(os.path.join(val+'b_hand', filename))
          if img is not None:
              imgs.append(processImage(img))
-     for filename in os.listdir('g_hand'):
-         img = cv2.imread(os.path.join('g_hand', filename))
+     for filename in os.listdir(val+'g_hand'):
+         img = cv2.imread(os.path.join(val+'g_hand', filename))
          if img is not None:
              imgs.append(processImage(img))
      return np.asarray(imgs)
 
-decoder = load_model('models/decoder_11.h5')
-encoder = load_model('models/encoder_11.h5')
+decoder = load_model('models/decoder_12.h5')
+encoder = load_model('models/encoder_12.h5')
 
 imgs = getImages()
 im_size = 64
 
 while True:
-    c = random.choice(range(0,imgs.shape[0]))
+    c = random.choice(range(0, imgs.shape[0]))
     img = imgs[c, :, :]
     print(c)
     #img = imgs[117]
-    img = img.reshape((1,64,64,3))
-    encoded = encoder.predict(img)
+    img = img.reshape((1, 64, 64, 3))
+    encoded = np.asarray(encoder.predict(img))
+    encoded_logvar = encoded[1, :, :]    #store log(var) vector for later
+    encoded = encoded[0, :, :]   #get just means
+    print('means = ', encoded)
+    print('std. dev = ', np.sqrt(np.exp(encoded_logvar)))
     decoded = decoder.predict(encoded)
     b, g, r = cv2.split(decoded.reshape(64, 64, 3))
     decoded = cv2.merge([r, g, b])
