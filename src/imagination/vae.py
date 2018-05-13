@@ -102,7 +102,7 @@ deconv = Conv2DTranspose(64, (5, 5), strides= (2,2), activation='relu')(deconv)
 deconv = Conv2DTranspose(32, (6, 6), strides= (2,2), activation='relu')(deconv)
 decoded_mean = Conv2DTranspose(3, (6, 6), strides= (2,2), activation='sigmoid')(deconv)
 
-encoder = Model(img_input, z_mean, name='encoder')
+encoder = Model(img_input, [z_mean, z_log_var], name='encoder')
 decoder = Model(decoder_input, decoded_mean, name='decoder')
 decoder.summary()
 reconstructed = decoder(z)
