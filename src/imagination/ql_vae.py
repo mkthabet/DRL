@@ -6,6 +6,7 @@ from keras.layers import Conv2D, Input, Dense, Flatten, Dropout
 from keras.optimizers import *
 from keras.models import Model, model_from_json, load_model
 from imgEnv import *
+import matplotlib.pyplot as plt
 
 IMAGE_WIDTH = 64
 IMAGE_HEIGHT = 64
@@ -14,6 +15,9 @@ CHANNELS = 3
 LATENT_DIM = 3
 
 ENV_LEARN_START = 0   #number of episodes before train_controllering env model starts`
+
+episodes = 0
+MAX_EPISODES = 1000
 
 def mse(x,y):
     return ((x-y)**2).mean()
@@ -25,14 +29,16 @@ class Brain:
         self.controller, self.env_model, self.encoder, self.controller_target = self._createModel()
 
     def _createModel(self):
-        encoder = load_model('models/encoder_14.h5')
+        encoder = load_model('models/encoder_12.h5')
 
         controller_input = Input(shape=(LATENT_DIM,), name='controller_input')
         controller_out = Dense(units=512, activation='relu')(controller_input)
+        controller_out = Dense(units=256, activation='relu')(controller_out)
+        #controller_out = Dense(units=128, activation='relu')(controller_out)
         controller_out = Dense(units=actionCnt, activation='linear')(controller_out)
         controller = Model(inputs=controller_input, outputs=controller_out)
-        opt = RMSprop(lr=0.00025)
-        controller.compile(loss='mse', optimizer=opt)
+        opt = RMSprop(lr=0.00005)
+        controller.compile(loss='mse', optimizer='adam')
         #controller.summary()
 
         #just copy the architecure
@@ -56,10 +62,10 @@ class Brain:
 
     def train_controller(self, x, y, epoch=1, verbose=0):
 
-        self.controller.fit(x, y, batch_size=32, nb_epoch=epoch, verbose=verbose)
+        self.controller.fit(x, y, batch_size=BATCH_SIZE, nb_epoch=epoch, verbose=verbose)
 
     def train_env(self, x, y, epoch=1, verbose=0):
-        self.env_model.fit(x, y, batch_size=32, nb_epoch=epoch, verbose=verbose)
+        self.env_model.fit(x, y, batch_size=BATCH_SIZE, nb_epoch=epoch, verbose=verbose)
 
     def predict(self, s, target=False):
         if target:
@@ -71,7 +77,9 @@ class Brain:
         return self.predict(s.reshape(1, LATENT_DIM), target).flatten()
 
     def encode(self, s):
-        return self.encoder.predict(s)
+        encoded = np.asarray(self.encoder.predict(s))
+        return encoded[0, 0, :]
+        #return encoded[0, :]
 
     def updateTargetModel(self):
         self.controller_target.set_weights(self.controller.get_weights())
@@ -101,10 +109,10 @@ BATCH_SIZE = 64
 GAMMA = 0.99
 
 MAX_EPSILON = 0.6
-MIN_EPSILON = 0.01
+MIN_EPSILON = 0.0001
 LAMBDA = 0.001      # speed of decay
 
-UPDATE_TARGET_FREQUENCY = 1
+UPDATE_TARGET_FREQUENCY = 6
 
 class Agent:
     steps = 0
@@ -138,17 +146,13 @@ class Agent:
         batch = self.memory.sample(BATCH_SIZE)
         batchLen = len(batch)
 
-        no_state = numpy.zeros(self.stateCnt)
+        no_state = numpy.zeros(LATENT_DIM)
 
         states = numpy.array([ o[0] for o in batch ])
         states_ = numpy.array([ (no_state if o[3] is None else o[3]) for o in batch ])
-        a_vec = numpy.array([ o[1] for o in batch ])
 
         p = agent.brain.predict(states)
         p_ = agent.brain.predict(states_, target=False)
-        #s_bar = agent.brain.encode(states)
-        #print 'sbar' , s_bar.shape
-        #s_bar_= agent.brain.encode(states_)
 
         x = numpy.zeros((len(batch), LATENT_DIM))
         y = numpy.zeros((len(batch), self.actionCnt))
@@ -162,6 +166,7 @@ class Agent:
             s = o[0]; a = o[1]; r = o[2]; s_ = o[3]; done = o[4]
             
             t = p[i]
+           # print (t)
             if s_ is None:
                 t[a] = r
             else:
@@ -175,38 +180,48 @@ class Agent:
 
         self.brain.train_controller(x, y)
 
-        if episodes>ENV_LEARN_START:
-            self.brain.train_env(x_env, y_env)
+        #if episodes>ENV_LEARN_START:
+        #    self.brain.train_env(x_env, y_env)
 
 
 #-------------------- ENVIRONMENT ---------------------
+ss = None
+selected = False
+r_history = np.zeros(MAX_EPISODES)
 class Environment:
     def __init__(self, num_items):
         self.env = PointingEnv(num_items)
 
     def run(self, agent, inspect = False):
         s = self.env.reset()
-        R = 0 
-        global sortedCnt
-        while True:         
+        R = 0
+        global selected
+        global ss
+        global r_history
+        if not selected:
+            ss = agent.brain.encode(np.reshape(s, (1, IMAGE_WIDTH, IMAGE_HEIGHT, CHANNELS)))
+            selected = True
+        #print (agent.brain.predictOne(ss))
+        while True:
             if inspect: self.env.printState()
 
-            sbar = np.asarray(agent.brain.encode(np.reshape(s, (1, IMAGE_WIDTH, IMAGE_HEIGHT, CHANNELS))))
-            sbar = sbar[0, :, :].flatten()    #get means of latent space distribution
+            sbar = agent.brain.encode(np.reshape(s, (1, IMAGE_WIDTH, IMAGE_HEIGHT, CHANNELS)))
+            #print(sbar)
 
             a = agent.act(sbar)
+           # print(a)
             s_, r, done = self.env.step(a)
 
-            sbar_ = np.asarray(agent.brain.encode(np.reshape(s_, (1, IMAGE_WIDTH, IMAGE_HEIGHT, CHANNELS))))
-            sbar_ = sbar_[0, :, :].flatten()    #get means of latent space distribution
+            sbar_ = agent.brain.encode(np.reshape(s_, (1, IMAGE_WIDTH, IMAGE_HEIGHT, CHANNELS)))
             if done: # terminal state
-                s_ = None
+                sbar_ = None
 
             agent.observe( (sbar, a, r, sbar_,done) )
             agent.replay()
 
             s = s_
             R += r
+            r_history[episodes] = R
 
             if done:
                 break
@@ -222,8 +237,6 @@ actionCnt = env.env.getActSpaceSize()
 
 agent = Agent(stateCnt, actionCnt)
 
-episodes = 0
-MAX_EPISODES = 1000
 
 try:
     while episodes < MAX_EPISODES:
@@ -233,4 +246,6 @@ finally:
     ss=0
     agent.brain.controller.save("models/controller_100.h5")
     agent.brain.env_model.save("models/env_model_100.h5")
+    plt.plot(r_history)
+    plt.show()
 #env.run(agent, False)
