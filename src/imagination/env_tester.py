@@ -57,9 +57,9 @@ class PointingEnv:
             if img is not None:
                 self.g_hand.append(processImage(img))
 
-        self.env_model = load_model("models/env_model_200.h5")
+        self.env_model = load_model("models/env_model_208.h5")
         self.encoder = load_model("models/encoder_12.h5")
-        self.dqn_model = load_model('models/controller_200.h5')
+        self.dqn_model = load_model('models/controller_208.h5')
         self.decoder = load_model("models/decoder_12.h5")
 
         self.s_bar = None
@@ -184,7 +184,7 @@ class PointingEnv:
         #print s_a.shape
         model_out = self.env_model.predict(s_a.reshape((1,s_a.size)))
         model_out = model_out.flatten()
-        self.s_bar = model_out
+        self.s_bar = self.s_bar + model_out
         #r = model_out[-2]
         #done = model_out[-1]
 

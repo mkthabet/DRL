@@ -22,7 +22,7 @@ GAMMA = 0.99
 MAX_EPSILON = 0.8
 MIN_EPSILON = 0.0001
 LAMBDA = 0.001      # speed of decay
-MAX_EPISODES = 2000
+MAX_EPISODES = 1000
 USE_TARGET = False
 UPDATE_TARGET_FREQUENCY = 5
 
@@ -92,7 +92,7 @@ class Brain:
 
         self.controller.fit(x, y, batch_size=BATCH_SIZE, nb_epoch=epoch, verbose=verbose)
 
-    def train_env(self, x, y, epoch=1, verbose=0):
+    def train_env(self, x, y, epoch=3, verbose=0):
         self.env_model_train.fit(x, y, batch_size=BATCH_SIZE, nb_epoch=epoch, verbose=verbose)
 
     def predict(self, s, target=False):
@@ -198,7 +198,7 @@ class Agent:
             #print('s_', s_, states_[i])
             x_env[i] = np.append(states[i], a)
             #y_env[i] = np.append(states_[i], [r, done])
-            y_env[i] = states_[i]
+            y_env[i] = states_[i] - states[i]
             #print(x_env[i], y_env[i])
 
         self.brain.train_controller(x, y)
@@ -269,8 +269,8 @@ try:
         episodes = episodes + 1
 finally:
     ss=0
-    agent.brain.controller.save("models/controller_200.h5")
-    agent.brain.env_model.save("models/env_model_200.h5")
+    agent.brain.controller.save("models/controller_209.h5")
+    agent.brain.env_model.save("models/env_model_209.h5")
     plt.plot(r_history)
     plt.show()
 #env.run(agent, False)
