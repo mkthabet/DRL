@@ -67,7 +67,7 @@ class Brain:
         def env_loss(x, x_decoded_mean):
             x = K.batch_flatten(x)
             x_decoded_mean = K.batch_flatten(x_decoded_mean)
-            xent_loss = LATENT_DIM * metrics.binary_crossentropy(x, x_decoded_mean)
+            xent_loss = (LATENT_DIM+2) * metrics.binary_crossentropy(x, x_decoded_mean)
             # xent_loss = metrics.binary_crossentropy(x, x_decoded_mean)
             kl_loss = - 0.5 * K.sum(1 + env_out_log_var - K.square(env_out_mean) - K.exp(env_out_log_var), axis=-1)
             return xent_loss + BETA * kl_loss
@@ -78,11 +78,13 @@ class Brain:
         #env_out = Dense(units=128, activation='relu', name='env_dense3')(env_out)
         env_out_mean = Dense(units=LATENT_DIM, name = 'env_out_mean')(env_out)
         env_out_log_var = Dense(units=LATENT_DIM, name = 'env_out_logvar')(env_out)
+        r_out = Dense(units=1, name='r_out')(env_out)
+        d_out = Dense(units = 1, activation= 'sigmoid', name = 'd_out')(env_out)
         env_out = Lambda(sampling, output_shape=(LATENT_DIM,))([env_out_mean, env_out_log_var])
-        #d_out = Dense(units = 1, activation= 'sigmoid', name = 'd_out')
+
         #r_out = Dense(units = 1, name = 'r_out')
-        env_model_train = Model(inputs=env_model_input, outputs=env_out)
-        env_model = Model(inputs=env_model_input, outputs=env_out_mean)
+        env_model_train = Model(inputs=env_model_input, outputs=[env_out, r_out, d_out])
+        env_model = Model(inputs=env_model_input, outputs=[env_out_mean, env_out_log_var, r_out, d_out])
         opt_env = RMSprop(lr=0.00025)
         env_model_train.compile(loss=env_loss, optimizer='adam')
 
@@ -177,7 +179,9 @@ class Agent:
         x_env = numpy.zeros((len(batch), LATENT_DIM+1))
         #print 'xenv' , x_env.shape
         #y_env = numpy.zeros((len(batch), LATENT_DIM+2))
-        y_env = numpy.zeros((len(batch), LATENT_DIM))
+        y_env_s = numpy.zeros((len(batch), LATENT_DIM))
+        y_env_r = np.zeros((len(batch), 1))
+        y_env_d = np.zeros((len(batch), 1))
         
         for i in range(batchLen):
             o = batch[i]
@@ -198,7 +202,9 @@ class Agent:
             #print('s_', s_, states_[i])
             x_env[i] = np.append(states[i], a)
             #y_env[i] = np.append(states_[i], [r, done])
-            y_env[i] = states_[i] - states[i]
+            y_env_s[i] = states_[i] - states[i]
+            y_env_r[i] = r
+            y_env_d[i] = done
             #print(x_env[i], y_env[i])
 
         self.brain.train_controller(x, y)
@@ -206,7 +212,7 @@ class Agent:
         #print(x_env, y_env)
 
         if episodes>ENV_LEARN_START:
-            self.brain.train_env(x_env, y_env)
+            self.brain.train_env(x_env, [y_env_s, y_env_r, y_env_d])
 
 
 #-------------------- ENVIRONMENT ---------------------

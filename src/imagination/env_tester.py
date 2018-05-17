@@ -57,9 +57,9 @@ class PointingEnv:
             if img is not None:
                 self.g_hand.append(processImage(img))
 
-        self.env_model = load_model("models/env_model_208.h5")
+        self.env_model = load_model("models/env_model_209.h5")
         self.encoder = load_model("models/encoder_12.h5")
-        self.dqn_model = load_model('models/controller_208.h5')
+        self.dqn_model = load_model('models/controller_209.h5')
         self.decoder = load_model("models/decoder_12.h5")
 
         self.s_bar = None
@@ -183,12 +183,13 @@ class PointingEnv:
         s_a = np.append(self.s_bar, a)
         #print s_a.shape
         model_out = self.env_model.predict(s_a.reshape((1,s_a.size)))
-        model_out = model_out.flatten()
+        #print('model out = ', model_out)
+        model_out = model_out[0].flatten()
         self.s_bar = self.s_bar + model_out
-        #r = model_out[-2]
-        #done = model_out[-1]
+        r = model_out[-2].flatten()
+        done = model_out[-1].flatten()
 
-        return self.s_bar#, r, done
+        return self.s_bar, r, done
 
     def act(self, s):
         out = self.dqn_model.predict(np.reshape(s, (1,LATENT_DIM)))
@@ -234,7 +235,8 @@ while(episodes < MAX_EPISODES):
     a = testEnv.act(testEnv.encode(s))
     s, r, d = testEnv.step(a)
     #s_hat, r_hat, d_hat = testEnv.model_step(a)
-    s_hat = testEnv.model_step(a)
+    s_hat, r_hat, d_hat = testEnv.model_step(a)
+    print 'r: ', r, ', r_hat', r_hat, ', d: ', d, ', d_hat', d_hat
     #print 'mse:  s: ', mse(testEnv.get_sbar(s),s_hat), ', r: ' , mse(r,r_hat) , ', d: ' , mse(d,d_hat)
 
     #if (round(r)-round(r_hat)) != 0:
