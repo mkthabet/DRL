@@ -3,6 +3,7 @@ import random
 import cv2
 import os
 from keras.models import Model, load_model
+import matplotlib.pyplot as plt
 
 IMAGE_WIDTH = 64
 IMAGE_HEIGHT = 64
@@ -56,9 +57,10 @@ class PointingEnv:
             if img is not None:
                 self.g_hand.append(processImage(img))
 
-        self.env_model = load_model("models/env_model_103.h5")
+        self.env_model = load_model("models/env_model_200.h5")
         self.encoder = load_model("models/encoder_12.h5")
-        self.dqn_model = load_model('models/controller_103.h5')
+        self.dqn_model = load_model('models/controller_200.h5')
+        self.decoder = load_model("models/decoder_12.h5")
 
         self.s_bar = None
 
@@ -174,6 +176,7 @@ class PointingEnv:
 
     def model_reset(self, s_zero):
         self.s_bar = self.encode(s_zero)
+        return self.s_bar
 
     def model_step(self, a):
         #print self.s_bar.shape
@@ -181,11 +184,11 @@ class PointingEnv:
         #print s_a.shape
         model_out = self.env_model.predict(s_a.reshape((1,s_a.size)))
         model_out = model_out.flatten()
-        self.s_bar = self.s_bar + model_out[:-2]
-        r = model_out[-2]
-        done = model_out[-1]
+        self.s_bar = model_out
+        #r = model_out[-2]
+        #done = model_out[-1]
 
-        return self.s_bar, r, done
+        return self.s_bar#, r, done
 
     def act(self, s):
         out = self.dqn_model.predict(np.reshape(s, (1,LATENT_DIM)))
@@ -198,7 +201,7 @@ s = testEnv.reset()
 #cv2.waitKey(0)
 #cv2.destroyAllWindows()
 #testEnv.model_reset(getDummyImg())0
-testEnv.model_reset(s)
+s_hat = testEnv.model_reset(s)
 #ip = 0
 d = 0
 episodes = 0
@@ -206,25 +209,40 @@ MAX_EPISODES = 50
 log = []
 misclass_r = 0
 misclass_d = 0
+im_size = 64
+figure = np.zeros((im_size, im_size*2, 3))
 while(episodes < MAX_EPISODES):
     if d == 1:
         #print 'new episode'
         episodes = episodes + 1
         d = 0
         s = testEnv.reset()
-        testEnv.model_reset(s)
+        s_hat = testEnv.model_reset(s)
+    b, g, r = cv2.split(s)
+    s = cv2.merge([r, g, b])
+    figure[:, 0:im_size, :] = s
+    decoded = testEnv.decoder.predict(s_hat.reshape(1, LATENT_DIM))
+    b, g, r = cv2.split(decoded.reshape(64,64,3))
+    decoded = cv2.merge([r, g, b])
+    figure[:, im_size:im_size*2, :] = decoded
+    print 'mse(s): ', mse(testEnv.encode(s), s_hat)#, ', r: ', r, ', r_hat', r_hat, ', d: ', d, ', d_hat', d_hat
+    print('s_hat', s_hat)
+    plt.figure()
+    plt.imshow(figure)
+    plt.show()
+
     a = testEnv.act(testEnv.encode(s))
     s, r, d = testEnv.step(a)
-    s_hat, r_hat, d_hat = testEnv.model_step(a)
+    #s_hat, r_hat, d_hat = testEnv.model_step(a)
+    s_hat = testEnv.model_step(a)
     #print 'mse:  s: ', mse(testEnv.get_sbar(s),s_hat), ', r: ' , mse(r,r_hat) , ', d: ' , mse(d,d_hat)
-    print 'mse(s): ', mse(testEnv.encode(s), s_hat), ', r: ', r, ', r_hat', r_hat, ', d: ', d, ', d_hat', d_hat
-    print('s_hat', s_hat)
-    if (round(r)-round(r_hat)) != 0:
-        misclass_r += 1
-    if (round(d)-round(d_hat)) != 0:
-        misclass_d += 1
-    log.append([mse(testEnv.encode(s), s_hat), mse(r, r_hat), mse(d, d_hat)])
-print 'misclass(r) = ', misclass_r, ' , misclass(d) = ', misclass_d
+
+    #if (round(r)-round(r_hat)) != 0:
+        #misclass_r += 1
+    #if (round(d)-round(d_hat)) != 0:
+        #misclass_d += 1
+    #log.append([mse(testEnv.encode(s), s_hat), mse(r, r_hat), mse(d, d_hat)])
+#print 'misclass(r) = ', misclass_r, ' , misclass(d) = ', misclass_d
 
 
 
