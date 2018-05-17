@@ -16,11 +16,10 @@ from keras import metrics
 from keras.datasets import mnist
 
 batch_size = 30
-latent_dim = 4
-intermediate_dim = 8
+latent_dim = 32
 epochs = 2000
 epsilon_std = 1.0
-BETA = 4
+BETA = 1
 IMAGE_WIDTH =64
 IMAGE_HEIGHT = 64
 CHANNELS = 3
@@ -64,8 +63,8 @@ def getImages():
 def vae_loss(x, x_decoded_mean):
     x= K.batch_flatten(x)
     x_decoded_mean = K.batch_flatten(x_decoded_mean)
-    #xent_loss = original_dim * metrics.binary_crossentropy(x, x_decoded_mean)
-    xent_loss =  original_dim* metrics.binary_crossentropy(x, x_decoded_mean)
+    xent_loss = original_dim * metrics.binary_crossentropy(x, x_decoded_mean)
+    #xent_loss = metrics.binary_crossentropy(x, x_decoded_mean)
     kl_loss = - 0.5 * K.sum(1 + z_log_var - K.square(z_mean) - K.exp(z_log_var), axis=-1)
     return xent_loss + BETA*kl_loss
 
@@ -121,9 +120,9 @@ try:
             batch_size=batch_size,
             validation_data=(x_test, x_test))
 finally:
-    encoder.save('models/encoder_11.h5')
-    decoder.save('models/decoder_11.h5')
-    vae.save('models/vae_11.h5')
+    encoder.save('models/encoder_18.h5')
+    decoder.save('models/decoder_18.h5')
+    vae.save('models/vae_18.h5')
 
 n = 15
 digit_size = 64

@@ -3,18 +3,19 @@ import random
 import cv2
 import os
 from keras.models import Model, load_model
-from math import ceil, floor, fabs
 
-IMAGE_WIDTH = 84
-IMAGE_HEIGHT = 84
-IMAGE_STACK = 2
+IMAGE_WIDTH = 64
+IMAGE_HEIGHT = 64
+CHANNELS = 3
+LATENT_DIM = 3
 
 def mse(x,y):
     return ((x-y)**2).mean()
 
 def processImage( img ):
-    rgb = cv2.resize(img, (IMAGE_WIDTH, IMAGE_HEIGHT))
-    return rgb
+    bgr = cv2.resize(img, (IMAGE_WIDTH, IMAGE_HEIGHT))
+    bgr = bgr.astype(float) / 255
+    return bgr
 
 def getDummyImg():
     filename = 'dummy_img.png'
@@ -55,9 +56,9 @@ class PointingEnv:
             if img is not None:
                 self.g_hand.append(processImage(img))
 
-        self.env_model = load_model("models/env_model_20.h5")
-        self.conv_model = load_model("models/conv_model_20.h5")
-        self.dqn_model = load_model('models/model_20.h5')
+        self.env_model = load_model("models/env_model_103.h5")
+        self.encoder = load_model("models/encoder_12.h5")
+        self.dqn_model = load_model('models/controller_103.h5')
 
         self.s_bar = None
 
@@ -167,26 +168,27 @@ class PointingEnv:
     def getActSpaceSize(self):
         return self.num_items+1
 
-    def get_sbar(self, s):
-        return self.conv_model.predict(np.expand_dims(s, axis=0))
+    def encode(self, s):
+        encoded = np.asarray(self.encoder.predict(np.reshape(s, (1, IMAGE_WIDTH, IMAGE_HEIGHT, CHANNELS))))
+        return encoded[0, 0, :]
 
     def model_reset(self, s_zero):
-        self.s_bar = self.get_sbar(s_zero).flatten()
+        self.s_bar = self.encode(s_zero)
 
     def model_step(self, a):
         #print self.s_bar.shape
         s_a = np.append(self.s_bar, a)
         #print s_a.shape
-        model_out = self.env_model.predict(s_a.reshape((1,1,s_a.size)))
+        model_out = self.env_model.predict(s_a.reshape((1,s_a.size)))
         model_out = model_out.flatten()
-        self.s_bar = model_out[:-2]
+        self.s_bar = self.s_bar + model_out[:-2]
         r = model_out[-2]
         done = model_out[-1]
 
         return self.s_bar, r, done
 
     def act(self, s):
-        out = self.dqn_model.predict(s.reshape(1, IMAGE_WIDTH, IMAGE_HEIGHT, 3)).flatten()
+        out = self.dqn_model.predict(np.reshape(s, (1,LATENT_DIM)))
         return np.argmax(out)
 
 
@@ -211,16 +213,17 @@ while(episodes < MAX_EPISODES):
         d = 0
         s = testEnv.reset()
         testEnv.model_reset(s)
-    a = testEnv.act(s)
+    a = testEnv.act(testEnv.encode(s))
     s, r, d = testEnv.step(a)
     s_hat, r_hat, d_hat = testEnv.model_step(a)
     #print 'mse:  s: ', mse(testEnv.get_sbar(s),s_hat), ', r: ' , mse(r,r_hat) , ', d: ' , mse(d,d_hat)
-    print 'mse(s): ', mse(testEnv.get_sbar(s), s_hat), ', r: ', r, ', r_hat', r_hat, ', d: ', d, ', d_hat', d_hat
+    print 'mse(s): ', mse(testEnv.encode(s), s_hat), ', r: ', r, ', r_hat', r_hat, ', d: ', d, ', d_hat', d_hat
+    print('s_hat', s_hat)
     if (round(r)-round(r_hat)) != 0:
         misclass_r += 1
     if (round(d)-round(d_hat)) != 0:
         misclass_d += 1
-    log.append([mse(testEnv.get_sbar(s), s_hat), mse(r, r_hat), mse(d, d_hat)])
+    log.append([mse(testEnv.encode(s), s_hat), mse(r, r_hat), mse(d, d_hat)])
 print 'misclass(r) = ', misclass_r, ' , misclass(d) = ', misclass_d
 
 

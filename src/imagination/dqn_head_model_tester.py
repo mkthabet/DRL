@@ -6,7 +6,7 @@ import random, numpy, math, gym
 from keras.models import Sequential, load_model
 from keras.layers import *
 from keras.optimizers import *
-from imgEnv import *
+from imgEnv_val import *
 
 IMAGE_WIDTH = 84
 IMAGE_HEIGHT = 84
@@ -19,13 +19,15 @@ class Brain:
         self.stateCnt = stateCnt
         self.actionCnt = actionCnt
 
-        self.model = self._createModel()
+        self.model, self.conv_model, self.dqn_head_model = self._createModel()
         #self.model.load_weights("cartpole-basic.h5")
 
     def _createModel(self):
-        model = load_model("models/model_41.h5")
+        model = load_model("models/model_1.h5")
+        conv_model = load_model("models/conv_model_1.h5")
+        dqn_head_model = load_model("models/dqn_head_model_1.h5")
 
-        return model
+        return model, conv_model, dqn_head_model
 
     def train(self, x, y, epoch=1, verbose=0):
 
@@ -137,7 +139,7 @@ class Environment:
             #cv2.waitKey(0)
             #cv2.destroyAllWindows()
             a = agent.act(s)
-            #print a
+            print a
             s_, r, done = self.env.step(a)
 
             s = s_
@@ -158,9 +160,8 @@ actionCnt = env.env.getActSpaceSize()
 agent = Agent(stateCnt, actionCnt)
 
 episodes = 0
-MAX_EPISODES = 50
-while episodes < MAX_EPISODES:
-    env.run(agent)
-    episodes += 1
+MAX_EPISODES = 1000
+
+env.run(agent)
     #agent.brain.model.save("point_3.h5")
 #env.run(agent, False)

@@ -11,13 +11,20 @@ import matplotlib.pyplot as plt
 IMAGE_WIDTH = 64
 IMAGE_HEIGHT = 64
 CHANNELS = 3
-
 LATENT_DIM = 3
 
-ENV_LEARN_START = 0   #number of episodes before train_controllering env model starts`
+ENV_LEARN_START = 200   #number of episodes before train_controllering env model starts`
+MEMORY_CAPACITY = 10000
+BATCH_SIZE = 64
+GAMMA = 0.99
+MAX_EPSILON = 0.8
+MIN_EPSILON = 0.0001
+LAMBDA = 0.001      # speed of decay
+MAX_EPISODES = 2000
+USE_TARGET = False
+UPDATE_TARGET_FREQUENCY = 5
 
 episodes = 0
-MAX_EPISODES = 1000
 
 def mse(x,y):
     return ((x-y)**2).mean()
@@ -34,12 +41,13 @@ class Brain:
         controller_input = Input(shape=(LATENT_DIM,), name='controller_input')
         controller_out = Dense(units=512, activation='relu')(controller_input)
         controller_out = Dense(units=256, activation='relu')(controller_out)
-        #controller_out = Dense(units=128, activation='relu')(controller_out)
+        #controller_out = Dense(units=32, activation='relu')(controller_out)
+        #controller_out = Dense(units=16, activation='relu')(controller_out)
         controller_out = Dense(units=actionCnt, activation='linear')(controller_out)
         controller = Model(inputs=controller_input, outputs=controller_out)
-        opt = RMSprop(lr=0.00005)
+        opt = RMSprop(lr=0.00025)
         controller.compile(loss='mse', optimizer='adam')
-        #controller.summary()
+        controller.summary()
 
         #just copy the architecure
         json_string = controller.to_json()
@@ -51,12 +59,13 @@ class Brain:
         #env_dropout1 = Dropout(0.5)
         #env_out = env_dropout1(env_out)
         env_out = Dense(units=256, activation='relu', name = 'env_dense2')(env_out)
+        #env_out = Dense(units=128, activation='relu', name='env_dense3')(env_out)
         #env_dropout2 = Dropout(0.5)
         #env_out = env_dropout2(env_out)
         env_out = Dense(units=LATENT_DIM+2, activation='linear', name = 'env_out')(env_out)
         env_model = Model(inputs=env_model_input, outputs=env_out)
         opt_env = RMSprop(lr=0.00025)
-        env_model.compile(loss='mse', optimizer=opt)
+        env_model.compile(loss='mse', optimizer='adam')
 
         return controller, env_model, encoder, controller_target
 
@@ -103,17 +112,6 @@ class Memory:   # stored as ( s, a, r, s_ , d)
         return random.sample(self.samples, n)
 
 #-------------------- AGENT ---------------------------
-MEMORY_CAPACITY = 100000
-BATCH_SIZE = 64
-
-GAMMA = 0.99
-
-MAX_EPSILON = 0.6
-MIN_EPSILON = 0.0001
-LAMBDA = 0.001      # speed of decay
-
-UPDATE_TARGET_FREQUENCY = 6
-
 class Agent:
     steps = 0
     epsilon = MAX_EPSILON
@@ -146,13 +144,13 @@ class Agent:
         batch = self.memory.sample(BATCH_SIZE)
         batchLen = len(batch)
 
-        no_state = numpy.zeros(LATENT_DIM)
+        no_state = numpy.zeros(LATENT_DIM)-3
 
         states = numpy.array([ o[0] for o in batch ])
         states_ = numpy.array([ (no_state if o[3] is None else o[3]) for o in batch ])
 
         p = agent.brain.predict(states)
-        p_ = agent.brain.predict(states_, target=False)
+        p_ = agent.brain.predict(states_, target=USE_TARGET)
 
         x = numpy.zeros((len(batch), LATENT_DIM))
         y = numpy.zeros((len(batch), self.actionCnt))
@@ -175,13 +173,19 @@ class Agent:
             x[i] = s
             y[i] = t
             #print 'sbar[i]', s_bar[i].shape
+            #if s_ != None:
+                #print(s_.shape)
+            #print('s_', s_, states_[i])
             x_env[i] = np.append(states[i], a)
-            y_env[i] = np.append(states_[i], [r, done])
+            y_env[i] = np.append((states_[i]-states[i]), [r, done])
+            #print(x_env[i], y_env[i])
 
         self.brain.train_controller(x, y)
 
-        #if episodes>ENV_LEARN_START:
-        #    self.brain.train_env(x_env, y_env)
+        #print(x_env, y_env)
+
+        if episodes>ENV_LEARN_START:
+            self.brain.train_env(x_env, y_env)
 
 
 #-------------------- ENVIRONMENT ---------------------
@@ -244,8 +248,8 @@ try:
         episodes = episodes + 1
 finally:
     ss=0
-    agent.brain.controller.save("models/controller_100.h5")
-    agent.brain.env_model.save("models/env_model_100.h5")
+    agent.brain.controller.save("models/controller_103.h5")
+    agent.brain.env_model.save("models/env_model_103.h5")
     plt.plot(r_history)
     plt.show()
 #env.run(agent, False)

@@ -7,18 +7,15 @@ from __future__ import print_function
 
 import numpy as np
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 import os
 import cv2
 from scipy.stats import norm
 import random
 import random
 
-from keras.layers import Input, Lambda, Conv2D, Dense, Flatten, Conv2DTranspose, Reshape
-from keras.models import Model, load_model
-from keras.optimizers import *
-from keras import backend as K
-from keras import metrics
-from keras.datasets import mnist
+from keras.models import load_model
+
 
 batch_size = 50
 latent_dim = 3
@@ -39,42 +36,60 @@ def processImage( img ):
 
 
 def getImages():
+     b_imgs, g_imgs, b_only, g_only, b_hand, g_hand = [], [], [], [], [], []
      VAL = 0
      val = 'validation/'
      if not VAL:
-        val = ''  # change to empty string to test on training set
-     imgs= []
-     for filename in os.listdir(val+'b'):
-         img = cv2.imread(os.path.join(val+'b', filename))
+         val = ''  # change to empty string to test on training set
+     for filename in os.listdir(val + 'b'):
+         img = cv2.imread(os.path.join(val + 'b', filename))
          if img is not None:
-             imgs.append(processImage(img))
-     for filename in os.listdir(val+'g'):
-         img = cv2.imread(os.path.join(val+'g', filename))
+             b_imgs.append(processImage(img))
+     for filename in os.listdir(val + 'g'):
+         img = cv2.imread(os.path.join(val + 'g', filename))
          if img is not None:
-             imgs.append(processImage(img))
-     for filename in os.listdir(val+'b_only'):
-         img = cv2.imread(os.path.join(val+'b_only', filename))
+             g_imgs.append(processImage(img))
+     for filename in os.listdir(val + 'b_only'):
+         img = cv2.imread(os.path.join(val + 'b_only', filename))
          if img is not None:
-             imgs.append(processImage(img))
-     for filename in os.listdir(val+'g_only'):
-         img = cv2.imread(os.path.join(val+'g_only', filename))
+             b_only.append(processImage(img))
+     for filename in os.listdir(val + 'g_only'):
+         img = cv2.imread(os.path.join(val + 'g_only', filename))
          if img is not None:
-             imgs.append(processImage(img))
-     for filename in os.listdir(val+'b_hand'):
-         img = cv2.imread(os.path.join(val+'b_hand', filename))
+             g_only.append(processImage(img))
+     for filename in os.listdir(val + 'b_hand'):
+         img = cv2.imread(os.path.join(val + 'b_hand', filename))
          if img is not None:
-             imgs.append(processImage(img))
-     for filename in os.listdir(val+'g_hand'):
-         img = cv2.imread(os.path.join(val+'g_hand', filename))
+             b_hand.append(processImage(img))
+     for filename in os.listdir(val + 'g_hand'):
+         img = cv2.imread(os.path.join(val + 'g_hand', filename))
          if img is not None:
-             imgs.append(processImage(img))
-     return np.asarray(imgs)
+             g_hand.append(processImage(img))
+     return b_imgs, g_imgs, b_only, g_only, b_hand, g_hand
 
 decoder = load_model('models/decoder_12.h5')
 encoder = load_model('models/encoder_12.h5')
 
-imgs = getImages()
+imgs_list = []
+for i in getImages():
+    imgs_list.append(i)
+
+b_imgs, g_imgs, b_only, g_only, b_hand, g_hand = getImages()
+imgs = np.asarray(b_imgs +g_imgs + b_only + g_only + b_hand + g_hand)
+#imgs = np.asarray(imgs_list)
+
 im_size = 64
+
+
+# draw scatter plot of image classes in latent space
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+for c, imgs_ in enumerate(imgs_list):
+    encoded = encoder.predict(np.asarray(imgs_))
+    encoded = np.asarray(encoded)
+    #print(encoded.shape)
+    ax.scatter(encoded[0, :, 0], encoded[0, :, 1], encoded[0, :, 2])
+plt.show()
 
 while True:
     c = random.choice(range(0, imgs.shape[0]))
@@ -112,6 +127,10 @@ while True:
     plt.figure()
     plt.imshow(figure)
     plt.show()
+
+
+
+
 
     #print(encoded)
     #print(decoded.shape)

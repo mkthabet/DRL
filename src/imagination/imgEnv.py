@@ -3,14 +3,15 @@ import random
 import cv2
 import os
 
-IMAGE_WIDTH = 84
-IMAGE_HEIGHT = 84
+IMAGE_WIDTH = 64
+IMAGE_HEIGHT = 64
 IMAGE_STACK = 2
 
 def processImage( img ):
     #rgb = None
-    rgb = cv2.resize(img, (IMAGE_WIDTH, IMAGE_HEIGHT))
-    return rgb
+    bgr = cv2.resize(img, (IMAGE_WIDTH, IMAGE_HEIGHT))
+    bgr = bgr.astype(float) / 255
+    return bgr
     #r, g, b = rgb[:,:,0], rgb[:,:,1], rgb[:,:,2]
     #gray = 0.2989 * r + 0.5870 * g + 0.1140 * b     # extract luminance
     #o = gray.astype('float32') / 128 - 1    # normalize

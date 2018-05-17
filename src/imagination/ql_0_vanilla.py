@@ -7,11 +7,11 @@ from keras.optimizers import *
 from keras.models import Model
 from imgEnv import *
 
-IMAGE_WIDTH = 84
-IMAGE_HEIGHT = 84
+IMAGE_WIDTH = 64
+IMAGE_HEIGHT = 64
 IMAGE_STACK = 2
 
-ENV_LEARN_START = 200   #number of episodes before training env model starts
+ENV_LEARN_START = 300   #number of episodes before training env model starts
 
 sortedCnt = 0
 
@@ -41,7 +41,7 @@ class Brain:
 
         q_out = dqn_head_model(conv_out)
         dqn_model = Model(img_input,q_out)
-        dqn_model.compile(loss='mse', optimizer=opt)
+        dqn_model.compile(loss='mse', optimizer='adam')
 
         dqn_target = Model(img_input,q_out)
         dqn_target.compile(loss='mse', optimizer=opt)
@@ -153,7 +153,7 @@ class Agent:
         a_vec = numpy.array([ o[1] for o in batch ])
 
         p = agent.brain.predict(states)
-        p_ = agent.brain.predict(states_, target=True)
+        p_ = agent.brain.predict(states_, target=False)
         s_bar = agent.brain.get_s_bar(states)
         #print 'sbar' , s_bar.shape
         s_bar_= agent.brain.get_s_bar(states_)
@@ -170,6 +170,7 @@ class Agent:
             s = o[0]; a = o[1]; r = o[2]; s_ = o[3]; done = o[4]
             
             t = p[i]
+            #print(t)
             if s_ is None:
                 t[a] = r
             else:
@@ -183,17 +184,26 @@ class Agent:
 
         self.brain.train(x, y)
 
-        if episodes>ENV_LEARN_START:
-            self.brain.train_env(x_env,y_env)
+        #if episodes>ENV_LEARN_START:
+         #   self.brain.train_env(x_env,y_env)
 
 
 #-------------------- ENVIRONMENT ---------------------
+
+ss = None
+selected = False
 class Environment:
     def __init__(self, num_items):
         self.env = PointingEnv(num_items)
 
     def run(self, agent, inspect = False):
         s = self.env.reset()
+        global selected
+        global ss
+        if not selected:
+            ss = s
+            selected = True
+        #print (agent.brain.predictOne(ss))
         R = 0 
         global sortedCnt
         while True:         
@@ -234,8 +244,9 @@ try:
         env.run(agent)
         episodes = episodes + 1
 finally:
-    agent.brain.model.save("models/model_40.h5")
-    agent.brain.env_model.save("models/env_model_40.h5")
-    agent.brain.dqn_head_model.save("models/dqn_head_model_40.h5")
-    agent.brain.conv_model.save("models/conv_model_40.h5")
+    ss= None
+    #agent.brain.model.save("models/model_41.h5")
+    #agent.brain.env_model.save("models/env_model_41.h5")
+    #agent.brain.dqn_head_model.save("models/dqn_head_model_41.h5")
+    #agent.brain.conv_model.save("models/conv_model_41.h5")
 #env.run(agent, False)

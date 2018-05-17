@@ -11,7 +11,7 @@ IMAGE_WIDTH = 84
 IMAGE_HEIGHT = 84
 IMAGE_STACK = 2
 
-ENV_LEARN_START = 200   #number of episodes before training env model starts
+ENV_LEARN_START = 300   #number of episodes before training env model starts
 
 sortedCnt = 0
 
@@ -34,14 +34,14 @@ class Brain:
         conv_out = conv_out_layer(conv_out)
         conv_model = Model(img_input, conv_out)
         opt = RMSprop(lr=0.00025)
-        conv_model.compile(loss='mse', optimizer=opt)
+        #conv_model.compile(loss='mse', optimizer=opt)
         #conv_model.summary()
 
         dqn_head_input = Input(shape=(conv_out_layer.output_shape[1],), name='dqn_head_input')
         dqn_out = Dense(units=512, activation='relu')(dqn_head_input)
         dqn_out = Dense(units=actionCnt, activation='linear')(dqn_out)
         dqn_head_model = Model(inputs=dqn_head_input, outputs=dqn_out)
-        dqn_head_model.compile(loss='mse', optimizer=opt)
+        #dqn_head_model.compile(loss='mse', optimizer=opt)
         #dqn_head_model.summary()
 
         q_out = dqn_head_model(conv_out)
@@ -123,7 +123,7 @@ MAX_EPSILON = 0.6
 MIN_EPSILON = 0.01
 LAMBDA = 0.001      # speed of decay
 
-UPDATE_TARGET_FREQUENCY = 80
+UPDATE_TARGET_FREQUENCY = 1
 
 class Agent:
     steps = 0
@@ -247,8 +247,8 @@ try:
         episodes = episodes + 1
 finally:
     ss=0
-    #agent.brain.model.save("models/model_31.h5")
-    #agent.brain.env_model.save("models/env_model_31.h5")
-    #agent.brain.dqn_head_model.save("models/dqn_head_model_31.h5")
-    #agent.brain.conv_model.save("models/conv_model_31.h5")
+    agent.brain.model.save("models/model_41.h5")
+    agent.brain.env_model.save("models/env_model_41.h5")
+    agent.brain.dqn_head_model.save("models/dqn_head_model_41.h5")
+    agent.brain.conv_model.save("models/conv_model_41.h5")
 #env.run(agent, False)
