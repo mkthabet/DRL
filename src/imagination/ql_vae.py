@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 IMAGE_WIDTH = 64
 IMAGE_HEIGHT = 64
 CHANNELS = 3
-LATENT_DIM = 8
+LATENT_DIM = 3
 
 ENV_LEARN_START = 200   #number of episodes before train_controllering env model starts`
 MEMORY_CAPACITY = 10000
@@ -27,7 +27,7 @@ USE_TARGET = False
 UPDATE_TARGET_FREQUENCY = 5
 
 epsilon_std = 1.0
-BETA = 1
+BETA = 8
 episodes = 0
 
 def mse(x,y):
@@ -40,7 +40,7 @@ class Brain:
         self.controller, self.env_model, self.encoder, self.controller_target, self.env_model_train, self.r_model = self._createModel()
 
     def _createModel(self):
-        encoder = load_model('models/encoder_20.h5')
+        encoder = load_model('models/encoder_12.h5')
 
         controller_input = Input(shape=(LATENT_DIM,), name='controller_input')
         controller_out = Dense(units=512, activation='relu')(controller_input)
@@ -68,7 +68,8 @@ class Brain:
             x_decoded_mean = K.batch_flatten(x_decoded_mean)
             xent_loss = (LATENT_DIM+2) * metrics.binary_crossentropy(x, x_decoded_mean)
             # xent_loss = metrics.binary_crossentropy(x, x_decoded_mean)
-            kl_loss = - 0.5 * K.sum(1 + env_out_log_var - K.square(env_out_mean) - K.exp(env_out_log_var), axis=-1)
+            #kl_loss = - 0.5 * K.sum(1 + env_out_log_var - K.square(env_out_mean) - K.exp(env_out_log_var), axis=-1)
+            kl_loss = - 0.5 * K.sum(1 + env_out_log_var/K.log(2.) - K.square(env_out_mean)/(.4) - K.exp(env_out_log_var)/(4.), axis=-1)
             return xent_loss + BETA * kl_loss
 
         env_model_input = Input(shape=(LATENT_DIM+1,), name = 'env_in')
@@ -284,9 +285,9 @@ try:
         episodes = episodes + 1
 finally:
     ss=0
-    agent.brain.controller.save("models/controller_210.h5")
-    agent.brain.env_model.save("models/env_model_210.h5")
-    agent.brain.r_model.save("models/r_model_210.h5")
+    agent.brain.controller.save("models/controller_211.h5")
+    agent.brain.env_model.save("models/env_model_211.h5")
+    agent.brain.r_model.save("models/r_model_211.h5")
     plt.plot(r_history)
     plt.show()
 #env.run(agent, False)
