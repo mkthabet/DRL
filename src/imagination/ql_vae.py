@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 IMAGE_WIDTH = 64
 IMAGE_HEIGHT = 64
 CHANNELS = 3
-LATENT_DIM = 3
+LATENT_DIM = 8
 
 ENV_LEARN_START = 200   #number of episodes before train_controllering env model starts`
 MEMORY_CAPACITY = 10000
@@ -22,13 +22,12 @@ GAMMA = 0.99
 MAX_EPSILON = 0.8
 MIN_EPSILON = 0.0001
 LAMBDA = 0.001      # speed of decay
-MAX_EPISODES = 1000
+MAX_EPISODES = 1200
 USE_TARGET = False
 UPDATE_TARGET_FREQUENCY = 5
 
 epsilon_std = 1.0
-BETA = 4
-
+BETA = 1
 episodes = 0
 
 def mse(x,y):
@@ -38,10 +37,10 @@ class Brain:
     def __init__(self, stateCnt, actionCnt):
         self.stateCnt = stateCnt
         self.actionCnt = actionCnt
-        self.controller, self.env_model, self.encoder, self.controller_target, self.env_model_train = self._createModel()
+        self.controller, self.env_model, self.encoder, self.controller_target, self.env_model_train, self.r_model = self._createModel()
 
     def _createModel(self):
-        encoder = load_model('models/encoder_12.h5')
+        encoder = load_model('models/encoder_20.h5')
 
         controller_input = Input(shape=(LATENT_DIM,), name='controller_input')
         controller_out = Dense(units=512, activation='relu')(controller_input)
@@ -78,24 +77,33 @@ class Brain:
         #env_out = Dense(units=128, activation='relu', name='env_dense3')(env_out)
         env_out_mean = Dense(units=LATENT_DIM, name = 'env_out_mean')(env_out)
         env_out_log_var = Dense(units=LATENT_DIM, name = 'env_out_logvar')(env_out)
-        r_out = Dense(units=1, name='r_out')(env_out)
-        d_out = Dense(units = 1, activation= 'sigmoid', name = 'd_out')(env_out)
+        #r_out = Dense(units=1, name='r_out')(env_out)
+        #d_out = Dense(units = 1, activation= 'sigmoid', name = 'd_out')(env_out)
         env_out = Lambda(sampling, output_shape=(LATENT_DIM,))([env_out_mean, env_out_log_var])
-
-        #r_out = Dense(units = 1, name = 'r_out')
-        env_model_train = Model(inputs=env_model_input, outputs=[env_out, r_out, d_out])
-        env_model = Model(inputs=env_model_input, outputs=[env_out_mean, env_out_log_var, r_out, d_out])
+        env_model_train = Model(inputs=env_model_input, outputs=env_out)
+        env_model = Model(inputs=env_model_input, outputs=[env_out_mean, env_out_log_var])
         opt_env = RMSprop(lr=0.00025)
         env_model_train.compile(loss=env_loss, optimizer='adam')
 
-        return controller, env_model, encoder, controller_target, env_model_train
+        r_model_input = Input(shape=(LATENT_DIM+1,), name = 'r_in')
+        r_model_out = Dense(units=512, activation='relu', name = 'r_dense1')(r_model_input)
+        r_model_out = Dense(units=256, activation='relu', name = 'r_dense2')(r_model_out)
+        r_out = Dense(units=1, name='r_out')(r_model_out)
+        d_out = Dense(units = 1, activation= 'sigmoid', name = 'd_out')(r_model_out)
+        r_model = Model(r_model_input, [r_out, d_out])
+        r_model.compile(loss='mse', optimizer='adam')
+
+        return controller, env_model, encoder, controller_target, env_model_train, r_model
 
     def train_controller(self, x, y, epoch=1, verbose=0):
 
         self.controller.fit(x, y, batch_size=BATCH_SIZE, nb_epoch=epoch, verbose=verbose)
 
-    def train_env(self, x, y, epoch=3, verbose=0):
+    def train_env(self, x, y, epoch=4, verbose=0):
         self.env_model_train.fit(x, y, batch_size=BATCH_SIZE, nb_epoch=epoch, verbose=verbose)
+
+    def train_r(self, x, y, epoch=4, verbose=0):
+        self.r_model.fit(x, y, batch_size=BATCH_SIZE, nb_epoch=epoch, verbose=verbose)
 
     def predict(self, s, target=False):
         if target:
@@ -212,7 +220,8 @@ class Agent:
         #print(x_env, y_env)
 
         if episodes>ENV_LEARN_START:
-            self.brain.train_env(x_env, [y_env_s, y_env_r, y_env_d])
+            self.brain.train_env(x_env, y_env_s)
+            self.brain.train_r(x_env, [y_env_r, y_env_d])
 
 
 #-------------------- ENVIRONMENT ---------------------
@@ -275,8 +284,9 @@ try:
         episodes = episodes + 1
 finally:
     ss=0
-    agent.brain.controller.save("models/controller_209.h5")
-    agent.brain.env_model.save("models/env_model_209.h5")
+    agent.brain.controller.save("models/controller_210.h5")
+    agent.brain.env_model.save("models/env_model_210.h5")
+    agent.brain.r_model.save("models/r_model_210.h5")
     plt.plot(r_history)
     plt.show()
 #env.run(agent, False)

@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 IMAGE_WIDTH = 64
 IMAGE_HEIGHT = 64
 CHANNELS = 3
-LATENT_DIM = 3
+LATENT_DIM = 8
 
 def mse(x,y):
     return ((x-y)**2).mean()
@@ -57,10 +57,11 @@ class PointingEnv:
             if img is not None:
                 self.g_hand.append(processImage(img))
 
-        self.env_model = load_model("models/env_model_209.h5")
-        self.encoder = load_model("models/encoder_12.h5")
-        self.dqn_model = load_model('models/controller_209.h5')
-        self.decoder = load_model("models/decoder_12.h5")
+        self.env_model = load_model("models/env_model_210.h5")
+        self.encoder = load_model("models/encoder_20.h5")
+        self.dqn_model = load_model('models/controller_210.h5')
+        self.decoder = load_model("models/decoder_20.h5")
+        self.r_model = load_model("models/r_model_210.h5")
 
         self.s_bar = None
 
@@ -186,8 +187,9 @@ class PointingEnv:
         #print('model out = ', model_out)
         model_out = model_out[0].flatten()
         self.s_bar = self.s_bar + model_out
-        r = model_out[-2].flatten()
-        done = model_out[-1].flatten()
+        r_out = self.r_model.predict(s_a.reshape((1,s_a.size)))
+        r = r_out[0].flatten()
+        done = r_out[1].flatten()
 
         return self.s_bar, r, done
 
