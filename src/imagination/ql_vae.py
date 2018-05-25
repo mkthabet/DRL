@@ -1,4 +1,5 @@
-import random, numpy, math, gym
+import random, math, gym
+import numpy as np
 
 #-------------------- BRAIN ---------------------------
 from keras.models import Sequential
@@ -15,20 +16,28 @@ IMAGE_HEIGHT = 64
 CHANNELS = 3
 LATENT_DIM = 3
 
-ENV_LEARN_START = 200   #number of episodes before train_controllering env model starts`
+ENV_LEARN_START = 0   #number of episodes before training env model starts`
 MEMORY_CAPACITY = 10000
 BATCH_SIZE = 64
 GAMMA = 0.99
 MAX_EPSILON = 0.8
 MIN_EPSILON = 0.0001
 LAMBDA = 0.001      # speed of decay
-MAX_EPISODES = 1200
+MAX_EPISODES = 1500
 USE_TARGET = False
 UPDATE_TARGET_FREQUENCY = 5
 
 epsilon_std = 1.0
-BETA = 8
+BETA = 7
 episodes = 0
+
+def int2onehot(a, n):
+    onehot = np.zeros(n)
+    onehot[a] = 1
+    return onehot
+
+def onehot2int(onehot):
+    return np.argmax(onehot)
 
 def mse(x,y):
     return ((x-y)**2).mean()
@@ -49,7 +58,7 @@ class Brain:
         #controller_out = Dense(units=16, activation='relu')(controller_out)
         controller_out = Dense(units=actionCnt, activation='linear')(controller_out)
         controller = Model(inputs=controller_input, outputs=controller_out)
-        opt = RMSprop(lr=0.00025)
+        controller_opt = adam(lr=0.00025)
         controller.compile(loss='mse', optimizer='adam')
         controller.summary()
 
@@ -66,13 +75,13 @@ class Brain:
         def env_loss(x, x_decoded_mean):
             x = K.batch_flatten(x)
             x_decoded_mean = K.batch_flatten(x_decoded_mean)
-            xent_loss = (LATENT_DIM+2) * metrics.binary_crossentropy(x, x_decoded_mean)
+            xent_loss = (LATENT_DIM) * metrics.binary_crossentropy(x, x_decoded_mean)
             # xent_loss = metrics.binary_crossentropy(x, x_decoded_mean)
             #kl_loss = - 0.5 * K.sum(1 + env_out_log_var - K.square(env_out_mean) - K.exp(env_out_log_var), axis=-1)
             kl_loss = - 0.5 * K.sum(1 + env_out_log_var/K.log(2.) - K.square(env_out_mean)/(4.) - K.exp(env_out_log_var)/(4.), axis=-1)
             return xent_loss + BETA * kl_loss
 
-        env_model_input = Input(shape=(LATENT_DIM+1,), name = 'env_in')
+        env_model_input = Input(shape=(LATENT_DIM+3,), name = 'env_in')
         env_out = Dense(units=512, activation='relu', name = 'env_dense1')(env_model_input)
         env_out = Dense(units=256, activation='relu', name = 'env_dense2')(env_out)
         #env_out = Dense(units=128, activation='relu', name='env_dense3')(env_out)
@@ -83,13 +92,13 @@ class Brain:
         env_out = Lambda(sampling, output_shape=(LATENT_DIM,))([env_out_mean, env_out_log_var])
         env_model_train = Model(inputs=env_model_input, outputs=env_out)
         env_model = Model(inputs=env_model_input, outputs=[env_out_mean, env_out_log_var])
-        opt_env = RMSprop(lr=0.00025)
+        opt_env = adam(lr=0.00025)
         env_model_train.compile(loss=env_loss, optimizer='adam')
 
-        r_model_input = Input(shape=(LATENT_DIM+1,), name = 'r_in')
+        r_model_input = Input(shape=(LATENT_DIM+3,), name = 'r_in')
         r_model_out = Dense(units=512, activation='relu', name = 'r_dense1')(r_model_input)
         r_model_out = Dense(units=256, activation='relu', name = 'r_dense2')(r_model_out)
-        r_out = Dense(units=1, name='r_out')(r_model_out)
+        r_out = Dense(units=1, name='r_out', activation='linear')(r_model_out)
         d_out = Dense(units = 1, activation= 'sigmoid', name = 'd_out')(r_model_out)
         r_model = Model(r_model_input, [r_out, d_out])
         r_model.compile(loss='mse', optimizer='adam')
@@ -157,7 +166,7 @@ class Agent:
         if random.random() < self.epsilon:
             return random.randint(0, self.actionCnt-1)
         else:
-            return numpy.argmax(self.brain.predictOne(s))
+            return np.argmax(self.brain.predictOne(s))
 
     def observe(self, sample):  # in (s, a, r, s_, done) format
         self.memory.add(sample)
@@ -174,21 +183,21 @@ class Agent:
         batch = self.memory.sample(BATCH_SIZE)
         batchLen = len(batch)
 
-        no_state = numpy.zeros(LATENT_DIM)
+        no_state = np.zeros(LATENT_DIM)
 
-        states = numpy.array([ o[0] for o in batch ])
-        states_ = numpy.array([ (no_state if o[3] is None else o[3]) for o in batch ])
+        states = np.array([ o[0] for o in batch ])
+        states_ = np.array([ (no_state if o[3] is None else o[3]) for o in batch ])
 
         p = agent.brain.predict(states)
         p_ = agent.brain.predict(states_, target=USE_TARGET)
 
-        x = numpy.zeros((len(batch), LATENT_DIM))
-        y = numpy.zeros((len(batch), self.actionCnt))
+        x = np.zeros((len(batch), LATENT_DIM))
+        y = np.zeros((len(batch), self.actionCnt))
 
-        x_env = numpy.zeros((len(batch), LATENT_DIM+1))
+        x_env = np.zeros((len(batch), LATENT_DIM+actionCnt))
         #print 'xenv' , x_env.shape
-        #y_env = numpy.zeros((len(batch), LATENT_DIM+2))
-        y_env_s = numpy.zeros((len(batch), LATENT_DIM))
+        #y_env = np.zeros((len(batch), LATENT_DIM+2))
+        y_env_s = np.zeros((len(batch), LATENT_DIM))
         y_env_r = np.zeros((len(batch), 1))
         y_env_d = np.zeros((len(batch), 1))
         
@@ -201,7 +210,7 @@ class Agent:
             if s_ is None:
                 t[a] = r
             else:
-                t[a] = r + GAMMA * numpy.amax(p_[i])
+                t[a] = r + GAMMA * np.amax(p_[i])
 
             x[i] = s
             y[i] = t
@@ -209,7 +218,7 @@ class Agent:
             #if s_ != None:
                 #print(s_.shape)
             #print('s_', s_, states_[i])
-            x_env[i] = np.append(states[i], a)
+            x_env[i] = np.append(states[i], int2onehot(a, actionCnt))
             #y_env[i] = np.append(states_[i], [r, done])
             y_env_s[i] = states_[i] - states[i]
             y_env_r[i] = r
@@ -285,9 +294,9 @@ try:
         episodes = episodes + 1
 finally:
     ss=0
-    agent.brain.controller.save("models/controller_212.h5")
-    agent.brain.env_model.save("models/env_model_212.h5")
-    agent.brain.r_model.save("models/r_model_212.h5")
+    agent.brain.controller.save("models/controller_216.h5")
+    agent.brain.env_model.save("models/env_model_216.h5")
+    agent.brain.r_model.save("models/r_model_216.h5")
     plt.plot(r_history)
     plt.show()
 #env.run(agent, False)

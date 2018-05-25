@@ -10,6 +10,14 @@ IMAGE_HEIGHT = 64
 CHANNELS = 3
 LATENT_DIM = 3
 
+def int2onehot(a, n):
+    onehot = np.zeros(n)
+    onehot[a] = 1
+    return onehot
+
+def onehot2int(onehot):
+    return np.argmax(onehot)
+
 def mse(x,y):
     return ((x-y)**2).mean()
 
@@ -57,11 +65,11 @@ class PointingEnv:
             if img is not None:
                 self.g_hand.append(processImage(img))
 
-        self.env_model = load_model("models/env_model_212.h5")
+        self.env_model = load_model("models/env_model_215.h5")
         self.encoder = load_model("models/encoder_12.h5")
-        self.dqn_model = load_model('models/controller_212.h5')
+        self.dqn_model = load_model('models/controller_215.h5')
         self.decoder = load_model("models/decoder_12.h5")
-        self.r_model = load_model("models/r_model_212.h5")
+        self.r_model = load_model("models/r_model_215.h5")
 
         self.s_bar = None
 
@@ -181,12 +189,13 @@ class PointingEnv:
 
     def model_step(self, a):
         #print self.s_bar.shape
-        s_a = np.append(self.s_bar, a)
+        s_a = np.append(self.s_bar, int2onehot(a,3))
         #print s_a.shape
         model_out = self.env_model.predict(s_a.reshape((1,s_a.size)))
         #print('model out = ', model_out)
         model_out = model_out[0].flatten()
         self.s_bar = self.s_bar + model_out
+        #self.s_bar = model_out
         r_out = self.r_model.predict(s_a.reshape((1,s_a.size)))
         r = r_out[0].flatten()
         done = r_out[1].flatten()
@@ -238,6 +247,8 @@ while(episodes < MAX_EPISODES):
     s, r, d = testEnv.step(a)
     #s_hat, r_hat, d_hat = testEnv.model_step(a)
     s_hat, r_hat, d_hat = testEnv.model_step(a)
+    #print ('action = ', a)
+    print ('z = ', s_hat)
     print 'r: ', r, ', r_hat', r_hat, ', d: ', d, ', d_hat', d_hat
     #print 'mse:  s: ', mse(testEnv.get_sbar(s),s_hat), ', r: ' , mse(r,r_hat) , ', d: ' , mse(d,d_hat)
 
