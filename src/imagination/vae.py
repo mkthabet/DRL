@@ -15,50 +15,17 @@ from keras import backend as K
 from keras import metrics
 from keras.datasets import mnist
 
-batch_size = 30
-latent_dim = 32
-epochs = 2000
+from load_process_images import getImages
+
+batch_size = 200
+latent_dim = 16
+epochs = 50
 epsilon_std = 1.0
-BETA = 1
-IMAGE_WIDTH =64
+BETA = 4
+IMAGE_WIDTH = 64
 IMAGE_HEIGHT = 64
 CHANNELS = 3
 original_dim = IMAGE_HEIGHT*IMAGE_WIDTH*CHANNELS
-
-
-def processImage( img ):
-    image = cv2.resize(img, (IMAGE_WIDTH, IMAGE_HEIGHT))
-    image = image.astype(float)/255
-    return image
-
-
-def getImages():
-    imgs= []
-    for filename in os.listdir('b'):
-        img = cv2.imread(os.path.join('b', filename))
-        if img is not None:
-            imgs.append(processImage(img))
-    for filename in os.listdir('g'):
-        img = cv2.imread(os.path.join('g', filename))
-        if img is not None:
-            imgs.append(processImage(img))
-    for filename in os.listdir('b_only'):
-        img = cv2.imread(os.path.join('b_only', filename))
-        if img is not None:
-            imgs.append(processImage(img))
-    for filename in os.listdir('g_only'):
-        img = cv2.imread(os.path.join('g_only', filename))
-        if img is not None:
-            imgs.append(processImage(img))
-    for filename in os.listdir('b_hand'):
-        img = cv2.imread(os.path.join('b_hand', filename))
-        if img is not None:
-            imgs.append(processImage(img))
-    for filename in os.listdir('g_hand'):
-        img = cv2.imread(os.path.join('g_hand', filename))
-        if img is not None:
-            imgs.append(processImage(img))
-    return np.asarray(imgs)
 
 def vae_loss(x, x_decoded_mean):
     x= K.batch_flatten(x)
@@ -110,7 +77,7 @@ opt = RMSprop(lr=0.00025)
 vae.compile(optimizer='adam', loss=vae_loss)
 vae.summary()
 
-x_train = y_train = x_test = y_test = getImages()
+x_train = y_train = x_test = y_test = getImages(return_single=True)
 
 
 try:
@@ -120,9 +87,9 @@ try:
             batch_size=batch_size,
             validation_data=(x_test, x_test))
 finally:
-    encoder.save('models/encoder_18.h5')
-    decoder.save('models/decoder_18.h5')
-    vae.save('models/vae_18.h5')
+    encoder.save('models/encoder_103.h5')
+    decoder.save('models/decoder_103.h5')
+    vae.save('models/vae_103.h5')
 
 n = 15
 digit_size = 64
