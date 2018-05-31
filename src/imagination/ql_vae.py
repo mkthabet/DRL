@@ -8,13 +8,13 @@ from keras.optimizers import *
 from keras.models import Model, model_from_json, load_model
 from keras import backend as K
 from keras import metrics
-from imgEnv import *
+from pointing_env import PointingEnv
 import matplotlib.pyplot as plt
 
 IMAGE_WIDTH = 64
 IMAGE_HEIGHT = 64
 CHANNELS = 3
-LATENT_DIM = 3
+LATENT_DIM = 4
 
 ENV_LEARN_START = 0   #number of episodes before training env model starts`
 MEMORY_CAPACITY = 10000
@@ -22,13 +22,13 @@ BATCH_SIZE = 64
 GAMMA = 0.99
 MAX_EPSILON = 0.8
 MIN_EPSILON = 0.0001
-LAMBDA = 0.001      # speed of decay
+LAMBDA = 0.001      # speed of decay+
 MAX_EPISODES = 1500
 USE_TARGET = False
 UPDATE_TARGET_FREQUENCY = 5
 
 epsilon_std = 1.0
-BETA = 7
+BETA = 1
 episodes = 0
 
 def int2onehot(a, n):
@@ -49,7 +49,7 @@ class Brain:
         self.controller, self.env_model, self.encoder, self.controller_target, self.env_model_train, self.r_model = self._createModel()
 
     def _createModel(self):
-        encoder = load_model('models/encoder_12.h5')
+        encoder = load_model('models/encoder_104.h5')
 
         controller_input = Input(shape=(LATENT_DIM,), name='controller_input')
         controller_out = Dense(units=512, activation='relu')(controller_input)
@@ -75,13 +75,13 @@ class Brain:
         def env_loss(x, x_decoded_mean):
             x = K.batch_flatten(x)
             x_decoded_mean = K.batch_flatten(x_decoded_mean)
-            xent_loss = (LATENT_DIM) * metrics.binary_crossentropy(x, x_decoded_mean)
+            xent_loss = metrics.mean_squared_error(x, x_decoded_mean)
             # xent_loss = metrics.binary_crossentropy(x, x_decoded_mean)
             #kl_loss = - 0.5 * K.sum(1 + env_out_log_var - K.square(env_out_mean) - K.exp(env_out_log_var), axis=-1)
             kl_loss = - 0.5 * K.sum(1 + env_out_log_var/K.log(2.) - K.square(env_out_mean)/(4.) - K.exp(env_out_log_var)/(4.), axis=-1)
             return xent_loss + BETA * kl_loss
 
-        env_model_input = Input(shape=(LATENT_DIM+3,), name = 'env_in')
+        env_model_input = Input(shape=(LATENT_DIM+actionCnt,), name = 'env_in')
         env_out = Dense(units=512, activation='relu', name = 'env_dense1')(env_model_input)
         env_out = Dense(units=256, activation='relu', name = 'env_dense2')(env_out)
         #env_out = Dense(units=128, activation='relu', name='env_dense3')(env_out)
@@ -95,9 +95,9 @@ class Brain:
         opt_env = adam(lr=0.00025)
         env_model_train.compile(loss=env_loss, optimizer='adam')
 
-        r_model_input = Input(shape=(LATENT_DIM+3,), name = 'r_in')
-        r_model_out = Dense(units=512, activation='relu', name = 'r_dense1')(r_model_input)
-        r_model_out = Dense(units=256, activation='relu', name = 'r_dense2')(r_model_out)
+        r_model_input = Input(shape=(LATENT_DIM+actionCnt,), name = 'r_in')
+        r_model_out = Dense(units=256, activation='relu', name = 'r_dense1')(r_model_input)
+        r_model_out = Dense(units=128, activation='relu', name = 'r_dense2')(r_model_out)
         r_out = Dense(units=1, name='r_out', activation='linear')(r_model_out)
         d_out = Dense(units = 1, activation= 'sigmoid', name = 'd_out')(r_model_out)
         r_model = Model(r_model_input, [r_out, d_out])
@@ -107,13 +107,13 @@ class Brain:
 
     def train_controller(self, x, y, epoch=1, verbose=0):
 
-        self.controller.fit(x, y, batch_size=BATCH_SIZE, nb_epoch=epoch, verbose=verbose)
+        self.controller.fit(x, y, batch_size=BATCH_SIZE, epochs=epoch, verbose=verbose)
 
     def train_env(self, x, y, epoch=4, verbose=0):
-        self.env_model_train.fit(x, y, batch_size=BATCH_SIZE, nb_epoch=epoch, verbose=verbose)
+        self.env_model_train.fit(x, y, batch_size=BATCH_SIZE, epochs=epoch, verbose=verbose)
 
     def train_r(self, x, y, epoch=4, verbose=0):
-        self.r_model.fit(x, y, batch_size=BATCH_SIZE, nb_epoch=epoch, verbose=verbose)
+        self.r_model.fit(x, y, batch_size=BATCH_SIZE, epochs=epoch, verbose=verbose)
 
     def predict(self, s, target=False):
         if target:
@@ -279,7 +279,7 @@ class Environment:
         print("Total reward:", R, ", episode: ", episodes)
 
 #-------------------- MAIN ----------------------------
-num_items = 2;
+num_items = 3;
 env = Environment(num_items)
 
 stateCnt  = env.env.getStateSpaceSize()
@@ -294,9 +294,9 @@ try:
         episodes = episodes + 1
 finally:
     ss=0
-    agent.brain.controller.save("models/controller_216.h5")
-    agent.brain.env_model.save("models/env_model_216.h5")
-    agent.brain.r_model.save("models/r_model_216.h5")
+    agent.brain.controller.save("models/controller_300.h5")
+    agent.brain.env_model.save("models/env_model_300.h5")
+    agent.brain.r_model.save("models/r_model_300.h5")
     plt.plot(r_history)
     plt.show()
 #env.run(agent, False)

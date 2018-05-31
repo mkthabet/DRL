@@ -1,51 +1,30 @@
 import numpy as np
 import random
-import cv2
-import os
-from keras.models import Model, load_model
-import matplotlib.pyplot as plt
 from load_process_images import getImages
+import matplotlib.pyplot as plt
 
 IMAGE_WIDTH = 64
 IMAGE_HEIGHT = 64
-CHANNELS = 3
-LATENT_DIM = 4
-
-def int2onehot(a, n):
-    onehot = np.zeros(n)
-    onehot[a] = 1
-    return onehot
-
-def onehot2int(onehot):
-    return np.argmax(onehot)
-
-def mse(x,y):
-    return ((x-y)**2).mean()
+IMAGE_STACK = 2
 
 class PointingEnv:
-    def __init__(self, num_items = 3):
+    def __init__(self, num_items=3):
+        self.state = None
         self.num_items = num_items
-        self.purple, self.blue, self.orange, self.pu_bl, self.pu_or, self.bl_pu, self.bl_or, self.or_pu, self.or_bl, \
-        self.pu_hand, self.bl_hand, self.or_hand = getImages()
-
-        self.env_model = load_model("models/env_model_300.h5")
-        self.encoder = load_model("models/encoder_104.h5")
-        self.dqn_model = load_model('models/controller_300.h5')
-        self.decoder = load_model("models/decoder_104.h5")
-        self.r_model = load_model("models/r_model_300.h5")
-
-        self.s_bar = None
+        self.purple, self.blue, self.orange, self.pu_bl, self.pu_or, self.bl_pu, self.bl_or, self.or_pu, self.or_bl,\
+            self.pu_hand, self.bl_hand, self.or_hand = getImages()
 
 
     def reset(self):
         #self.state is the internal state.
         #self.state = random.randint(0,1) #0 = b, 1 = g, 2 = b_only, 3 = g_only,
+        #self.state = random.choice([0, 1, 2])
         self.state = 0
         return self._generateState()
 
 
     def step(self, action):
-        assert action < self.getActSpaceSize() and action >= 0, "action cannot exceed number of items +1 or be less than 0, action = %r" % action
+        assert action<self.getActSpaceSize() and action>=0, "action cannot exceed number of items +1 or be less than 0, action = %r" % action
 
         done = 0
 
@@ -168,6 +147,13 @@ class PointingEnv:
         state = self._generateState()
         stateArr = np.array(state)
         print "state = %s" % stateArr.T
+        #x = stateArr.shape
+        #print "state dims: "
+        #print(x)
+        #for i in self.item_list: print i
+        #print self.item_list
+        #print state
+        #for i in state: print i
 
     def getStateSpaceSize(self):
         return ( IMAGE_WIDTH, IMAGE_HEIGHT, 3)
@@ -175,79 +161,17 @@ class PointingEnv:
     def getActSpaceSize(self):
         return self.num_items+1
 
-    def encode(self, s):
-        encoded = np.asarray(self.encoder.predict(np.reshape(s, (1, IMAGE_WIDTH, IMAGE_HEIGHT, CHANNELS))))
-        return encoded[0, 0, :]
 
-    def model_reset(self, s_zero):
-        self.s_bar = self.encode(s_zero)
-        return self.s_bar
-
-    def model_step(self, a):
-        #print self.s_bar.shape
-        s_a = np.append(self.s_bar, int2onehot(a,self.getActSpaceSize()))
-        #print s_a.shape
-        model_out = self.env_model.predict(s_a.reshape((1,s_a.size)))
-        #print('model out = ', model_out)
-        model_out = model_out[0].flatten()
-        self.s_bar = self.s_bar + model_out
-        #self.s_bar = model_out
-        r_out = self.r_model.predict(s_a.reshape((1,s_a.size)))
-        r = r_out[0].flatten()
-        done = r_out[1].flatten()
-
-        return self.s_bar, r, done
-
-    def act(self, s):
-        out = self.dqn_model.predict(np.reshape(s, (1,LATENT_DIM)))
-        return np.argmax(out)
-
-
-testEnv = PointingEnv()
-s = testEnv.reset()
-s_hat = testEnv.model_reset(s)
-d = 0
-episodes = 0
-MAX_EPISODES = 50
-log = []
-misclass_r = 0
-misclass_d = 0
-im_size = 64
-figure = np.zeros((im_size, im_size*2, 3))
-while(episodes < MAX_EPISODES):
-    if d == 1:
-        #print 'new episode'
-        episodes = episodes + 1
-        d = 0
-        s = testEnv.reset()
-        s_hat = testEnv.model_reset(s)
-    figure[:, 0:im_size, :] = s
-    decoded = testEnv.decoder.predict(s_hat.reshape(1, LATENT_DIM))
-    figure[:, im_size:im_size*2, :] = decoded
-    print 'mse(s): ', mse(testEnv.encode(s), s_hat)#, ', r: ', r, ', r_hat', r_hat, ', d: ', d, ', d_hat', d_hat
-    #print('s_hat', s_hat)
-    plt.figure()
-    plt.imshow(figure)
-    plt.show()
-
-    a = testEnv.act(testEnv.encode(s))
-    s, r, d = testEnv.step(a)
-    #s_hat, r_hat, d_hat = testEnv.model_step(a)
-    s_hat, r_hat, d_hat = testEnv.model_step(a)
-    #print ('action = ', a)
-    print ('z = ', s_hat)
-    print 'r: ', r, ', r_hat', r_hat, ', d: ', d, ', d_hat', d_hat
-    #print 'mse:  s: ', mse(testEnv.get_sbar(s),s_hat), ', r: ' , mse(r,r_hat) , ', d: ' , mse(d,d_hat)
-
-    #if (round(r)-round(r_hat)) != 0:
-        #misclass_r += 1
-    #if (round(d)-round(d_hat)) != 0:
-        #misclass_d += 1
-    #log.append([mse(testEnv.encode(s), s_hat), mse(r, r_hat), mse(d, d_hat)])
-#print 'misclass(r) = ', misclass_r, ' , misclass(d) = ', misclass_d
-
-
-
-
-
+# testEnv = PointingEnv()
+# img = testEnv.reset()
+# plt.imshow(img)
+# plt.show()
+# ip = 0
+# while(ip<4):
+#     ip = int(raw_input('Enter action:'))
+#     img, r, d = testEnv.step(ip)
+#     if d:
+#         img = testEnv.reset()
+#     plt.imshow(img)
+#     plt.show()
 
