@@ -8,73 +8,82 @@ from keras import backend as K
 from keras import metrics
 # from pointing_model import PointingEnv
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import axes3d, Axes3D  # <-- Note the capitalization!
 
 IN_DIM = 1
 OUT_DIM = 1
 NUM_COMPONENTS = 24
-BATCH_SIZE = None
+BATCH_SIZE = 2500
+
+
+def get_mixture_coef(output, numComponents=24, outputDim=1):
+    out_mu = output[:, 0:outputDim * numComponents]
+    out_sigma = output[:, outputDim * numComponents:outputDim * numComponents * 2]
+    out_pi = output[:, outputDim * numComponents * 2:]
+    out_mu = K.reshape(out_mu, [-1, numComponents, outputDim])
+    out_mu = K.permute_dimensions(out_mu, [1, 0, 2])  # shape = [numComponents, batch, outputDim]
+    out_sigma = K.exp(out_sigma)
+    return out_pi, out_sigma, out_mu
+
+
+def tf_normal(y, mu, sigma):
+    oneDivSqrtTwoPI = 1 / math.sqrt(2 * math.pi)
+    result = y - mu  # shape = [numComponents, batch, outputDim]
+    result = K.permute_dimensions(result, [2, 1, 0])
+    result = result * (1 / (sigma + 1e-8))
+    result = -K.square(result) / 2
+    result = K.exp(result) * (1 / (sigma + 1e-8)) * oneDivSqrtTwoPI
+    result = K.prod(result, axis=[0])
+    return result
+
+
+def get_lossfunc(out_pi, out_sigma, out_mu, y):
+    result = tf_normal(y, out_mu, out_sigma)
+    result = result * out_pi
+    result = K.sum(result, axis=1, keepdims=True)
+    result = -K.log(result + 1e-8)
+    return K.mean(result)
+
+
+def mdn_loss(numComponents=24, outputDim=1):
+    def loss(y, output):
+        out_pi, out_sigma, out_mu = get_mixture_coef(output, numComponents, outputDim)
+        return get_lossfunc(out_pi, out_sigma, out_mu, y)
+
+    return loss
 
 
 class MDN:
-    def __init__(self, in_dim=IN_DIM, out_dim=OUT_DIM, num_components=NUM_COMPONENTS):
+    def __init__(self, in_dim=IN_DIM, out_dim=OUT_DIM, num_components=NUM_COMPONENTS, model_path=None):
         self.in_dim = in_dim
         self.out_dim = out_dim
         self.num_components = num_components
-        self.model, self.model_train = self._createModel()
+        if model_path is None:
+            self.model = self._createModel()
+        else:
+            self.model = load_model(model_path, custom_objects={'loss': mdn_loss(numComponents=self.num_components, outputDim=self.out_dim)})
 
     def _createModel(self):
-        def get_mixture_coef(output, numComponents=24, outputDim=1):
-            out_mu = output[:, 0:outputDim * numComponents]
-            out_sigma = output[:, outputDim * numComponents:outputDim * numComponents * 2]
-            out_pi = output[:, outputDim * numComponents * 2:]
-            out_mu = K.reshape(out_mu, [-1, numComponents, outputDim])
-            out_mu = K.permute_dimensions(out_mu, [1, 0, 2])  # shape = [numComponents, batch, outputDim]
-            out_sigma = K.exp(out_sigma)
-            return out_pi, out_sigma, out_mu
 
-        def tf_normal(y, mu, sigma):
-            oneDivSqrtTwoPI = 1 / math.sqrt(2 * math.pi)
-            result = y - mu  # shape = [numComponents, batch, outputDim]
-            result = K.permute_dimensions(result, [2, 1, 0])
-            result = result * (1 / (sigma + 1e-8))
-            result = -K.square(result) / 2
-            result = K.exp(result) * (1 / (sigma + 1e-8)) * oneDivSqrtTwoPI
-            result = K.prod(result, axis=[0])
-            return result
 
-        def get_lossfunc(out_pi, out_sigma, out_mu, y):
-            result = tf_normal(y, out_mu, out_sigma)
-            result = result * out_pi
-            result = K.sum(result, axis=1, keepdims=True)
-            result = -K.log(result + 1e-8)
-            return K.mean(result)
-
-        def mdn_loss(numComponents=24, outputDim=1):
-            def loss(y, output):
-                out_pi, out_sigma, out_mu = get_mixture_coef(output, numComponents, outputDim)
-                return get_lossfunc(out_pi, out_sigma, out_mu, y)
-            return loss
-
-        model_input = Input(shape=(1,), name='model_in')
-        model_out = Dense(units=24, activation='tanh', name='model_dense4')(model_input)
-        # model_out = Dense(units=2 * (1 * 24) + 24, name='model_out')(model_out)
-        out_pi = Dense(units=NUM_COMPONENTS, activation='softmax', name='out_pi')(
-            model_out)
-        out_mu = Dense(units=OUT_DIM * NUM_COMPONENTS, name='out_mu')(model_out)
-        out_sigma = Dense(units=OUT_DIM * NUM_COMPONENTS, name='out_sigma')(model_out)
+        model_input = Input(shape=(self.in_dim,), name='mdn_in')
+        model_out = Dense(units=256, activation='relu', name='mdn_dense1')(model_input)
+        model_out = Dense(units=128, activation='relu', name='mdn_dense2')(model_out)
+        out_pi = Dense(units=self.num_components, activation='softmax', name='out_pi')(model_out)
+        out_mu = Dense(units=self.out_dim * self.num_components, name='out_mu')(model_out)
+        out_sigma = Dense(units=self.out_dim * self.num_components, name='out_sigma')(model_out)
         out_concat = Concatenate()([out_mu, out_sigma, out_pi])
-        model_train = Model(inputs=model_input, outputs=out_concat)
-        model = Model(inputs=model_input, outputs=[out_mu, out_sigma, out_pi])
+        model = Model(inputs=model_input, outputs=out_concat)
         opt = Adam(lr=0.001)
-        model_train.compile(loss=mdn_loss(), optimizer=opt)
+        model.compile(loss=mdn_loss(numComponents=self.num_components, outputDim=self.out_dim), optimizer=opt)
         # model_train.summary()
-        return model, model_train
+        return model
 
-    def train_model(self, x, y, epoch=2000, verbose=1):
-        self.model_train.fit(x, y, batch_size=2500, epochs=epoch, verbose=verbose)
+    def train_model(self, x, y, batch_size=BATCH_SIZE, epoch=5000, verbose=1):
+        self.model.fit(x, y, batch_size=batch_size, epochs=epoch, verbose=verbose)
 
     def get_dist_params(self, x):
-        model_out = np.asarray(self.model_train.predict(x))
+        model_out = np.asarray(self.model.predict(x))
         out_mu = model_out[:, 0:self.out_dim * self.num_components]
         out_sigma = model_out[:, self.out_dim * self.num_components:self.out_dim * self.num_components * 2]
         out_pi = model_out[:, self.out_dim * self.num_components * 2:]
@@ -106,7 +115,7 @@ def generate(out_mu, out_sigma, out_pi, testSize, numComponents=24, outputDim=1,
                 result[i, j, d] = mu + rn[i, j] * std
     return result
 
-def test():
+def test1dim():
     sampleSize = 250
     numComponents = 24
     outputDim = 1
@@ -128,6 +137,34 @@ def test():
     plt.figure(figsize=(8, 8))
     plt.plot(x_data, y_data, 'ro', x_test, y_test[:, :, 0], 'bo', alpha=0.3)
     plt.show()
+
+
+def test2dim():
+    sampleSize = 250
+    numComponents = 24
+    outputDim = 2
+
+    z_data = np.float32(np.random.uniform(-10.5, 10.5, (1, sampleSize))).T
+    r_data = np.float32(np.random.normal(size=(sampleSize, 1)))
+    x1_data = np.float32(np.sin(0.75 * z_data) * 7.0 + z_data * 0.5 + r_data * 1.0)
+    x2_data = np.float32(np.sin(0.5 * z_data) * 7.0 + z_data * 0.5 + r_data * 1.0)
+    x_data = np.dstack((x1_data, x2_data))[:, 0, :]
+
+    x_test = np.float32(np.arange(-15.0, 15.0, 0.1))
+    x_test = x_test.reshape(x_test.size, 1)
+
+    mdn = MDN(out_dim=outputDim)
+    mdn.train_model(x_data, z_data)
+    mu, sigma, pi = mdn.get_dist_params(x_test)
+    y_test = generate(mu, sigma, pi, x_test.size)
+
+    fig = plt.figure()
+    ax = Axes3D(fig)
+    ax.scatter(y_test[:, 0, 0], y_test[:, 0, 1], x_test, c='r')
+    ax.scatter(x1_data, x2_data, z_data, c='b')
+    ax.legend()
+    plt.show()
 ####### MAIN #########
 
-test()
+#test1dim()
+test2dim()
