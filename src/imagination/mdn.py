@@ -22,6 +22,8 @@ def get_mixture_coef(output, numComponents=24, outputDim=1):
     out_pi = output[:, outputDim * numComponents * 2:]
     out_mu = K.reshape(out_mu, [-1, numComponents, outputDim])
     out_mu = K.permute_dimensions(out_mu, [1, 0, 2])  # shape = [numComponents, batch, outputDim]
+    out_sigma = K.reshape(out_sigma, [-1, numComponents, outputDim])
+    out_sigma = K.permute_dimensions(out_sigma, [1, 0, 2])  # shape = [numComponents, batch, outputDim]
     out_sigma = K.exp(out_sigma)
     return out_pi, out_sigma, out_mu
 
@@ -30,6 +32,7 @@ def tf_normal(y, mu, sigma):
     oneDivSqrtTwoPI = 1 / math.sqrt(2 * math.pi)
     result = y - mu  # shape = [numComponents, batch, outputDim]
     result = K.permute_dimensions(result, [2, 1, 0])
+    sigma = K.permute_dimensions(sigma, [2, 1, 0])
     result = result * (1 / (sigma + 1e-8))
     result = -K.square(result) / 2
     result = K.exp(result) * (1 / (sigma + 1e-8)) * oneDivSqrtTwoPI
@@ -101,6 +104,7 @@ class MDN:
 
 def generate(out_mu, out_sigma, out_pi, testSize, numComponents=24, outputDim=1, M=1):
     out_mu = np.transpose(out_mu, [1, 0, 2])    #shape = [numComponents, batch, outputDim]
+    out_sigma = np.transpose(out_sigma, [1, 0, 2])  # shape = [numComponents, batch, outputDim]
     result = np.random.rand(testSize, M, outputDim)
     rn = np.random.randn(testSize, M)
     mu = 0
@@ -111,7 +115,7 @@ def generate(out_mu, out_sigma, out_pi, testSize, numComponents=24, outputDim=1,
             for d in range(0, outputDim):
                 idx = np.random.choice(24, 1, p=out_pi[i])
                 mu = out_mu[idx, i, d]
-                std = out_sigma[i, idx]
+                std = out_sigma[idx, i,d]
                 result[i, j, d] = mu + rn[i, j] * std
     return result
 
@@ -154,9 +158,9 @@ def test2dim():
     x_test = x_test.reshape(x_test.size, 1)
 
     mdn = MDN(out_dim=outputDim)
-    mdn.train_model(x_data, z_data)
+    mdn.train_model(z_data, x_data)
     mu, sigma, pi = mdn.get_dist_params(x_test)
-    y_test = generate(mu, sigma, pi, x_test.size)
+    y_test = generate(mu, sigma, pi, x_test.size, outputDim=outputDim)
 
     fig = plt.figure()
     ax = Axes3D(fig)
