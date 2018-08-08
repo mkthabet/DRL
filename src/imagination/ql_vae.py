@@ -1,15 +1,15 @@
 import random, math, gym
 import numpy as np
-
-#-------------------- BRAIN ---------------------------
 from keras.models import Sequential
-from keras.layers import Conv2D, Input, Dense, Flatten, Dropout, Lambda
+from keras.layers import Conv2D, Input, Dense, Flatten, Dropout, Lambda, Concatenate
 from keras.optimizers import *
 from keras.models import Model, model_from_json, load_model
 from keras import backend as K
 from keras import metrics
 from pointing_env import PointingEnv
 import matplotlib.pyplot as plt
+from mdn import MDN
+#from tensorflow import contrib.distributions.MultivariateNormalDiag
 
 IMAGE_WIDTH = 64
 IMAGE_HEIGHT = 64
@@ -20,15 +20,16 @@ ENV_LEARN_START = 0   #number of episodes before training env model starts`
 MEMORY_CAPACITY = 10000
 BATCH_SIZE = 64
 GAMMA = 0.99
-MAX_EPSILON = 0.8
-MIN_EPSILON = 0.0001
+MAX_EPSILON = 1 #0.8
+MIN_EPSILON = 0.001 #0.0001
 LAMBDA = 0.001      # speed of decay+
 MAX_EPISODES = 1500
 USE_TARGET = False
 UPDATE_TARGET_FREQUENCY = 5
+NUM_COMPONENTS = 48
 
 epsilon_std = 1.0
-BETA = 1
+BETA = 0.0
 episodes = 0
 
 def int2onehot(a, n):
@@ -46,10 +47,11 @@ class Brain:
     def __init__(self, stateCnt, actionCnt):
         self.stateCnt = stateCnt
         self.actionCnt = actionCnt
-        self.controller, self.env_model, self.encoder, self.controller_target, self.env_model_train, self.r_model = self._createModel()
+        self.controller, self.encoder, self.controller_target, self.r_model = self._createModel()
+        self. env_model = MDN(num_components=NUM_COMPONENTS, in_dim=LATENT_DIM+self.actionCnt, out_dim=LATENT_DIM)
 
     def _createModel(self):
-        encoder = load_model('models/encoder_104.h5')
+        encoder = load_model('models/encoder_105.h5')
 
         controller_input = Input(shape=(LATENT_DIM,), name='controller_input')
         controller_out = Dense(units=512, activation='relu')(controller_input)
@@ -66,51 +68,22 @@ class Brain:
         json_string = controller.to_json()
         controller_target = model_from_json(json_string)
 
-        def sampling(args):
-            z_mean, z_log_var = args
-            epsilon = K.random_normal(shape=(K.shape(z_mean)[0], LATENT_DIM), mean=0.,
-                                      stddev=epsilon_std)
-            return z_mean + K.exp(z_log_var / 2) * epsilon
-
-        def env_loss(x, x_decoded_mean):
-            x = K.batch_flatten(x)
-            x_decoded_mean = K.batch_flatten(x_decoded_mean)
-            xent_loss = metrics.mean_squared_error(x, x_decoded_mean)
-            # xent_loss = metrics.binary_crossentropy(x, x_decoded_mean)
-            #kl_loss = - 0.5 * K.sum(1 + env_out_log_var - K.square(env_out_mean) - K.exp(env_out_log_var), axis=-1)
-            kl_loss = - 0.5 * K.sum(1 + env_out_log_var/K.log(2.) - K.square(env_out_mean)/(4.) - K.exp(env_out_log_var)/(4.), axis=-1)
-            return xent_loss + BETA * kl_loss
-
-        env_model_input = Input(shape=(LATENT_DIM+actionCnt,), name = 'env_in')
-        env_out = Dense(units=512, activation='relu', name = 'env_dense1')(env_model_input)
-        env_out = Dense(units=256, activation='relu', name = 'env_dense2')(env_out)
-        #env_out = Dense(units=128, activation='relu', name='env_dense3')(env_out)
-        env_out_mean = Dense(units=LATENT_DIM, name = 'env_out_mean')(env_out)
-        env_out_log_var = Dense(units=LATENT_DIM, name = 'env_out_logvar')(env_out)
-        #r_out = Dense(units=1, name='r_out')(env_out)
-        #d_out = Dense(units = 1, activation= 'sigmoid', name = 'd_out')(env_out)
-        env_out = Lambda(sampling, output_shape=(LATENT_DIM,))([env_out_mean, env_out_log_var])
-        env_model_train = Model(inputs=env_model_input, outputs=env_out)
-        env_model = Model(inputs=env_model_input, outputs=[env_out_mean, env_out_log_var])
-        opt_env = adam(lr=0.00025)
-        env_model_train.compile(loss=env_loss, optimizer='adam')
-
         r_model_input = Input(shape=(LATENT_DIM+actionCnt,), name = 'r_in')
-        r_model_out = Dense(units=256, activation='relu', name = 'r_dense1')(r_model_input)
-        r_model_out = Dense(units=128, activation='relu', name = 'r_dense2')(r_model_out)
+        r_model_out = Dense(units=512, activation='relu', name = 'r_dense1')(r_model_input)
+        r_model_out = Dense(units=256, activation='relu', name = 'r_dense2')(r_model_out)
         r_out = Dense(units=1, name='r_out', activation='linear')(r_model_out)
         d_out = Dense(units = 1, activation= 'sigmoid', name = 'd_out')(r_model_out)
         r_model = Model(r_model_input, [r_out, d_out])
         r_model.compile(loss='mse', optimizer='adam')
 
-        return controller, env_model, encoder, controller_target, env_model_train, r_model
+        return controller, encoder, controller_target, r_model
 
     def train_controller(self, x, y, epoch=1, verbose=0):
 
         self.controller.fit(x, y, batch_size=BATCH_SIZE, epochs=epoch, verbose=verbose)
 
-    def train_env(self, x, y, epoch=4, verbose=0):
-        self.env_model_train.fit(x, y, batch_size=BATCH_SIZE, epochs=epoch, verbose=verbose)
+    def train_env(self, x, y, epoch=4, verbose=1):
+        self.env_model.train_model(x, y, batch_size=BATCH_SIZE, epoch=epoch, verbose=verbose)
 
     def train_r(self, x, y, epoch=4, verbose=0):
         self.r_model.fit(x, y, batch_size=BATCH_SIZE, epochs=epoch, verbose=verbose)
@@ -171,7 +144,7 @@ class Agent:
     def observe(self, sample):  # in (s, a, r, s_, done) format
         self.memory.add(sample)
 
-        if self.steps % UPDATE_TARGET_FREQUENCY == 0:
+        if USE_TARGET and (self.steps % UPDATE_TARGET_FREQUENCY == 0):
             self.brain.updateTargetModel()
 
         # slowly decrease Epsilon based on our eperience
@@ -187,6 +160,9 @@ class Agent:
 
         states = np.array([ o[0] for o in batch ])
         states_ = np.array([ (no_state if o[3] is None else o[3]) for o in batch ])
+        #epsilon_noise = 0.05
+        #states = np.array([o[0] + np.random.normal(loc=0, scale=epsilon_noise, size=LATENT_DIM) for o in batch])
+        #states_ = np.array([(no_state if o[3] is None else o[3] + np.random.normal(loc=0, scale=epsilon_noise, size=LATENT_DIM)) for o in batch])
 
         p = agent.brain.predict(states)
         p_ = agent.brain.predict(states_, target=USE_TARGET)
@@ -220,7 +196,7 @@ class Agent:
             #print('s_', s_, states_[i])
             x_env[i] = np.append(states[i], int2onehot(a, actionCnt))
             #y_env[i] = np.append(states_[i], [r, done])
-            y_env_s[i] = states_[i] - states[i]
+            y_env_s[i] = states_[i]# - states[i]
             y_env_r[i] = r
             y_env_d[i] = done
             #print(x_env[i], y_env[i])
@@ -232,6 +208,11 @@ class Agent:
         if episodes>ENV_LEARN_START:
             self.brain.train_env(x_env, y_env_s)
             self.brain.train_r(x_env, [y_env_r, y_env_d])
+            #res = self.brain.env_model.predict(x_env)
+            #means = res[0].flatten()
+            #logvars = res[1].flatten()
+            #coeffs = res[2].flatten()
+            #print('coeffs = ', coeffs, 'means = ', means, 'vars = ', np.exp(logvars))
 
 
 #-------------------- ENVIRONMENT ---------------------
@@ -294,9 +275,9 @@ try:
         episodes = episodes + 1
 finally:
     ss=0
-    agent.brain.controller.save("models/controller_300.h5")
-    agent.brain.env_model.save("models/env_model_300.h5")
-    agent.brain.r_model.save("models/r_model_300.h5")
+    agent.brain.controller.save("models/controller_311.h5")
+    agent.brain.env_model.model.save("models/env_model_311.h5")
+    agent.brain.r_model.save("models/r_model_311.h5")
     plt.plot(r_history)
     plt.show()
 #env.run(agent, False)

@@ -14,6 +14,7 @@ IN_DIM = 1
 OUT_DIM = 1
 NUM_COMPONENTS = 24
 BATCH_SIZE = 2500
+BETA = 0.5
 
 
 def get_mixture_coef(output, numComponents=24, outputDim=1):
@@ -41,10 +42,15 @@ def tf_normal(y, mu, sigma):
 
 
 def get_lossfunc(out_pi, out_sigma, out_mu, y):
+    #shape(out_mu) = shape(out_sigma] = [num_componnents, batch, out_dim]
+    #shape(out_pi) = [batch, num_components]
     result = tf_normal(y, out_mu, out_sigma)
     result = result * out_pi
     result = K.sum(result, axis=1, keepdims=True)
     result = -K.log(result + 1e-8)
+    #kl_loss = - 0.5 * K.sum(1 + K.log(out_sigma*out_sigma) - K.square(out_mu) - out_sigma*out_sigma, axis=-1)
+    #kl_loss = K.sum(kl_loss, axis=0)
+    #return K.mean(result+BETA*kl_loss)
     return K.mean(result)
 
 
@@ -52,7 +58,6 @@ def mdn_loss(numComponents=24, outputDim=1):
     def loss(y, output):
         out_pi, out_sigma, out_mu = get_mixture_coef(output, numComponents, outputDim)
         return get_lossfunc(out_pi, out_sigma, out_mu, y)
-
     return loss
 
 
@@ -64,14 +69,14 @@ class MDN:
         if model_path is None:
             self.model = self._createModel()
         else:
-            self.model = load_model(model_path, custom_objects={'loss': mdn_loss(numComponents=self.num_components, outputDim=self.out_dim)})
+            self.model = load_model(model_path, custom_objects={'loss': mdn_loss(numComponents=self.num_components,
+                                                                                 outputDim=self.out_dim)})
 
     def _createModel(self):
-
-
         model_input = Input(shape=(self.in_dim,), name='mdn_in')
         model_out = Dense(units=256, activation='relu', name='mdn_dense1')(model_input)
-        model_out = Dense(units=128, activation='relu', name='mdn_dense2')(model_out)
+        model_out = Dense(units=256, activation='relu', name='mdn_dense2')(model_out)
+        model_out = Dense(units=256, activation='relu', name='mdn_dense3')(model_out)
         out_pi = Dense(units=self.num_components, activation='softmax', name='out_pi')(model_out)
         out_mu = Dense(units=self.out_dim * self.num_components, name='out_mu')(model_out)
         out_sigma = Dense(units=self.out_dim * self.num_components, name='out_sigma')(model_out)
@@ -93,13 +98,6 @@ class MDN:
         out_mu = np.reshape(out_mu, [-1, self.num_components, self.out_dim])
         out_sigma = np.reshape(out_sigma, [-1, self.num_components, self.out_dim])
         out_sigma = np.exp(out_sigma)
-        #print 'out shape:', model_out.shape
-        # means = model_out[0, :, :]
-        #print 'means shape:', out_mu.shape
-        # log_vars = model_out[1, :, :]
-        #print 'vars shape:', out_sigma.shape
-        # coefficients = model_out[2, :, :]
-        #print 'coeffs shape:', out_pi.shape
         return out_mu, out_sigma, out_pi
 
 def generate(out_mu, out_sigma, out_pi, testSize, numComponents=24, outputDim=1, M=1):
@@ -168,7 +166,9 @@ def test2dim():
     ax.scatter(x1_data, x2_data, z_data, c='b')
     ax.legend()
     plt.show()
+
+    
 ####### MAIN #########
 
 #test1dim()
-test2dim()
+#test2dim()

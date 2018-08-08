@@ -5,11 +5,13 @@ import os
 from keras.models import Model, load_model
 import matplotlib.pyplot as plt
 from load_process_images import getImages
+from mdn import MDN
 
 IMAGE_WIDTH = 64
 IMAGE_HEIGHT = 64
 CHANNELS = 3
 LATENT_DIM = 4
+NUM_COMPONENTS = 48
 
 def int2onehot(a, n):
     onehot = np.zeros(n)
@@ -28,11 +30,11 @@ class PointingEnv:
         self.purple, self.blue, self.orange, self.pu_bl, self.pu_or, self.bl_pu, self.bl_or, self.or_pu, self.or_bl, \
         self.pu_hand, self.bl_hand, self.or_hand = getImages()
 
-        self.env_model = load_model("models/env_model_300.h5")
-        self.encoder = load_model("models/encoder_104.h5")
-        self.dqn_model = load_model('models/controller_300.h5')
-        self.decoder = load_model("models/decoder_104.h5")
-        self.r_model = load_model("models/r_model_300.h5")
+        self.env_model = MDN(num_components=NUM_COMPONENTS, in_dim=LATENT_DIM+4, out_dim=LATENT_DIM, model_path="models/env_model_311.h5")
+        self.encoder = load_model("models/encoder_105.h5")
+        self.dqn_model = load_model('models/controller_311.h5')
+        self.decoder = load_model("models/decoder_105.h5")
+        self.r_model = load_model("models/r_model_311.h5")
 
         self.s_bar = None
 
@@ -40,7 +42,8 @@ class PointingEnv:
     def reset(self):
         #self.state is the internal state.
         #self.state = random.randint(0,1) #0 = b, 1 = g, 2 = b_only, 3 = g_only,
-        self.state = 0
+        self.state = random.choice([0, 1, 2])
+        #self.state = 0
         return self._generateState()
 
 
@@ -51,8 +54,8 @@ class PointingEnv:
 
         if self.state == 0:
             if action == 0:
-                #self.state = random.choice([5, 7, 9])
-                self.state = 7
+                self.state = random.choice([5, 7, 9])
+                #self.state = 7
                 reward = 1
             else:
                 reward = -1
@@ -68,8 +71,8 @@ class PointingEnv:
                 print 'mistake.....'
         elif self.state == 2:
             if action == 2:
-                #self.state = random.choice([4, 6, 11])
-                self.state = 11
+                self.state = random.choice([4, 6, 11])
+                #self.state = 11
                 reward = 1
             else:
                 reward = -1
@@ -180,6 +183,7 @@ class PointingEnv:
         return encoded[0, 0, :]
 
     def model_reset(self, s_zero):
+        print('resetting model...')
         self.s_bar = self.encode(s_zero)
         return self.s_bar
 
@@ -187,14 +191,25 @@ class PointingEnv:
         #print self.s_bar.shape
         s_a = np.append(self.s_bar, int2onehot(a,self.getActSpaceSize()))
         #print s_a.shape
-        model_out = self.env_model.predict(s_a.reshape((1,s_a.size)))
+        mu, sigma, pi = self.env_model.get_dist_params(s_a.reshape(1, -1))
         #print('model out = ', model_out)
-        model_out = model_out[0].flatten()
-        self.s_bar = self.s_bar + model_out
+        #print('coefficients = ', pi)
+        component = np.random.choice(np.arange(0, NUM_COMPONENTS, 1), p=pi.flatten())
+        mu = mu[0, component, :]
+        #z = np.random.normal(mu, np.exp(sigma[0, component, :]))
+        # z = np.zeros([LATENT_DIM,])
+        # for i in range(NUM_COMPONENTS):
+        #     z_log_var = z_log_vars[:, i * LATENT_DIM:(i + 1) * LATENT_DIM]
+        #     component = np.random.normal(loc=z_means[:, i], scale=np.exp(z_log_vars[:, i]/2))
+        #     z = z + component*coefficients[i]
+        #self.s_bar = self.s_bar + z
+        self.s_bar = mu
         #self.s_bar = model_out
         r_out = self.r_model.predict(s_a.reshape((1,s_a.size)))
         r = r_out[0].flatten()
         done = r_out[1].flatten()
+        #print('means = ', mu)
+        #print('sigmas = ', sigma)
 
         return self.s_bar, r, done
 
@@ -206,7 +221,7 @@ class PointingEnv:
 testEnv = PointingEnv()
 s = testEnv.reset()
 s_hat = testEnv.model_reset(s)
-d = 0
+d = d_hat = 0
 episodes = 0
 MAX_EPISODES = 50
 log = []
@@ -215,28 +230,31 @@ misclass_d = 0
 im_size = 64
 figure = np.zeros((im_size, im_size*2, 3))
 while(episodes < MAX_EPISODES):
-    if d == 1:
+    if round(d_hat) == 1:
         #print 'new episode'
         episodes = episodes + 1
-        d = 0
+        d_hat = 0
         s = testEnv.reset()
         s_hat = testEnv.model_reset(s)
     figure[:, 0:im_size, :] = s
     decoded = testEnv.decoder.predict(s_hat.reshape(1, LATENT_DIM))
     figure[:, im_size:im_size*2, :] = decoded
-    print 'mse(s): ', mse(testEnv.encode(s), s_hat)#, ', r: ', r, ', r_hat', r_hat, ', d: ', d, ', d_hat', d_hat
+    #print 'mse(s): ', mse(testEnv.encode(s), s_hat)#, ', r: ', r, ', r_hat', r_hat, ', d: ', d, ', d_hat', d_hat
     #print('s_hat', s_hat)
+
+    #a = testEnv.act(testEnv.encode(s))
+    a = testEnv.act(s_hat)
+    print ('z = ', s_hat, 'a = ', a)
     plt.figure()
     plt.imshow(figure)
     plt.show()
-
-    a = testEnv.act(testEnv.encode(s))
-    s, r, d = testEnv.step(a)
+    #s, r, d = testEnv.step(a)
     #s_hat, r_hat, d_hat = testEnv.model_step(a)
     s_hat, r_hat, d_hat = testEnv.model_step(a)
     #print ('action = ', a)
-    print ('z = ', s_hat)
-    print 'r: ', r, ', r_hat', r_hat, ', d: ', d, ', d_hat', d_hat
+
+    #print 'r: ', r, ', r_hat', r_hat, ', d: ', d, ', d_hat', d_hat
+    print 'r_hat: ', r_hat, 'd_hat: ', d_hat
     #print 'mse:  s: ', mse(testEnv.get_sbar(s),s_hat), ', r: ' , mse(r,r_hat) , ', d: ' , mse(d,d_hat)
 
     #if (round(r)-round(r_hat)) != 0:

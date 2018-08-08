@@ -18,8 +18,8 @@ class PointingEnv:
     def reset(self):
         #self.state is the internal state.
         #self.state = random.randint(0,1) #0 = b, 1 = g, 2 = b_only, 3 = g_only,
-        #self.state = random.choice([0, 1, 2])
-        self.state = 0
+        self.state = random.choice([0, 1, 2])
+        #self.state = 0
         return self._generateState()
 
 
@@ -30,8 +30,8 @@ class PointingEnv:
 
         if self.state == 0:
             if action == 0:
-                #self.state = random.choice([5, 7, 9])
-                self.state = 7
+                self.state = random.choice([5, 7, 9])
+                #self.state = 7
                 reward = 1
             else:
                 reward = -1
@@ -47,8 +47,8 @@ class PointingEnv:
                 print 'mistake.....'
         elif self.state == 2:
             if action == 2:
-                #self.state = random.choice([4, 6, 11])
-                self.state = 11
+                self.state = random.choice([4, 6, 11])
+                #self.state = 11
                 reward = 1
             else:
                 reward = -1
