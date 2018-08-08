@@ -8,27 +8,29 @@ from keras.optimizers import *
 from keras.models import Model, load_model, model_from_json
 from pointing_env import PointingEnv
 import matplotlib.pyplot as plt
+from mdn import MDN
 
 IMAGE_WIDTH = 64
 IMAGE_HEIGHT = 64
 CHANNELS = 3
-
-ENV_LEARN_START = 200   #number of episodes before training env model starts
 LATENT_DIM = 4
+
+ENV_LEARN_START = 0   #number of episodes before training env model starts`
+MEMORY_CAPACITY = 10000
 BATCH_SIZE = 64
-
-MEMORY_CAPACITY = 100000
-
 GAMMA = 0.99
-
-MAX_EPSILON = 0.8
-MIN_EPSILON = 0.01
-LAMBDA = 0.001      # speed of decay
+MAX_EPSILON = 1 #0.8
+MIN_EPSILON = 0.001 #0.0001
+LAMBDA = 0.001      # speed of decay+
+MAX_EPISODES = 300
 USE_TARGET = False
+UPDATE_TARGET_FREQUENCY = 5
+NUM_COMPONENTS = 48
 
-UPDATE_TARGET_FREQUENCY = 70
-
-sortedCnt = 0
+epsilon_std = 1.0
+BETA = 0.0
+episodes = 0
+ACTION_CNT = 4
 
 def int2onehot(a, n):
     onehot = np.zeros(n)
@@ -38,36 +40,29 @@ def int2onehot(a, n):
 class EnvironmentModel:
     def __init__(self):
         self.s_bar = None
-        self.env_model = load_model("models/env_model_303.h5")
-        self.r_model = load_model("models/r_model_303.h5")
+        self.env_model = MDN(num_components=NUM_COMPONENTS, in_dim=LATENT_DIM + 4, out_dim=LATENT_DIM,
+                             model_path="models/env_model_311.h5")
+        self.r_model = load_model("models/r_model_311.h5")
         self.decoder = load_model("models/decoder_105.h5")
         self.statecnt = LATENT_DIM
 
     def init_model(self, s_bar):
         self.s_bar = s_bar
-        decoded = self.decoder.predict(self.s_bar.reshape(1, LATENT_DIM))
         print('new episode ')
         #plt.imshow(decoded.reshape(IMAGE_HEIGHT, IMAGE_WIDTH, CHANNELS))
         #plt.show()
 
 
     def step(self, a):
-        #print self.s_bar.shape
-        s_a = np.append(self.s_bar, int2onehot(a, actionCnt))
-        #print s_a.shape
-        model_out = self.env_model.predict(s_a.reshape((1, s_a.size)))
-        #print('model out = ', model_out)
-        model_out = model_out[0].flatten()
-        self.s_bar = self.s_bar + model_out
-        #self.s_bar = model_out
-        r_out = self.r_model.predict(s_a.reshape((1,s_a.size)))
+        s_a = np.append(self.s_bar, int2onehot(a, ACTION_CNT))
+        mu, sigma, pi = self.env_model.get_dist_params(s_a.reshape(1, -1))
+        component = np.random.choice(np.arange(0, NUM_COMPONENTS, 1), p=pi.flatten())
+        mu = mu[0, component, :]
+        self.s_bar = mu
+        # self.s_bar = model_out
+        r_out = self.r_model.predict(s_a.reshape((1, s_a.size)))
         r = r_out[0].flatten()
         done = r_out[1].flatten()
-        decoded = self.decoder.predict(self.s_bar.reshape(1, LATENT_DIM))
-        #print('r = ', r, 'd = ', done)
-        #plt.imshow(decoded.reshape(IMAGE_HEIGHT, IMAGE_WIDTH, CHANNELS))
-        #plt.show()
-
 
         return self.s_bar, r, done
 
@@ -101,13 +96,13 @@ class Brain:
         self.controller.fit(x, y, batch_size=BATCH_SIZE, nb_epoch=epoch, verbose=verbose)
 
     def predict(self, s, target=False):
-        if not target:
-            return self.controller.predict(s)
-        else:
+        if target:
             return self.controller_target.predict(s)
+        else:
+            return self.controller.predict(s)
 
     def predictOne(self, s, target=False):
-        return self.predict(np.expand_dims(s, axis=0), target=target).flatten()
+        return self.predict(s.reshape(1, LATENT_DIM), target).flatten()
 
     def encode(self, s):
         p_z =  np.asarray(self.encoder.predict(s))
@@ -206,7 +201,7 @@ class Agent:
             x[i] = s
             y[i] = t
             x_env[i] = np.append(states[i], int2onehot(a, actionCnt))
-            y_env_s[i] = states_[i] - states[i]
+            y_env_s[i] = states_[i]
             y_env_r[i] = r
             y_env_d[i] = done
 
@@ -224,27 +219,34 @@ class Environment:
 
     def run(self, agent):
         s = self.env.reset()
-        s = agent.brain.encode(np.expand_dims(s, axis=0)).flatten()
-        self.env_model.init_model(s)
+        sbar = agent.brain.encode(np.reshape(s, (1, IMAGE_WIDTH, IMAGE_HEIGHT, CHANNELS)))
         R = 0
-        imaginary = True
+        imaginary = False
+        if episodes>0:
+            imaginary = True
+            self.env_model.init_model(sbar)
         #TODO: decide if imaginary or not
         while True:
-            a = agent.act(s)
-            print('a = ', a)
+            a = agent.act(sbar)
+            #print('a = ', a)
             if imaginary:
-                s_, r, done = self.env_model.step(a)
+                sbar_, r, done = self.env_model.step(a)
                 r, done = round(r), round(done)
             else:
                 s_, r, done = self.env.step(a)
+                sbar_ = agent.brain.encode(np.reshape(s_, (1, IMAGE_WIDTH, IMAGE_HEIGHT, CHANNELS)))
 
             if done: # terminal state
-                s_ = None
+                sbar_ = None
 
-            agent.observe((s, a, r, s_, done), imaginary=imaginary)
+            agent.observe((sbar, a, r, sbar_,done), imaginary=imaginary)
             agent.replay(imaginary=imaginary)
 
-            s = s_
+            if imaginary:
+                sbar = sbar_
+            else:
+                s = s_
+                sbar = agent.brain.encode(np.reshape(s, (1, IMAGE_WIDTH, IMAGE_HEIGHT, CHANNELS)))
             R += r
 
             if done:
@@ -272,6 +274,6 @@ finally:
     ss=0    #blah blah
     #agent.brain.model.save("models/model_26.h5")
     #agent.brain.env_model.save("models/env_model_26.h5")
-    agent.brain.controller.save("models/im_model_100.h5")
+    agent.brain.controller.save('models/controller_400.h5')
     #agent.brain.conv_model.save("models/conv_model_26.h5")
 #env.run(agent, False)
