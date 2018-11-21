@@ -12,28 +12,28 @@ from sklearn.manifold import TSNE
 from keras.models import load_model
 from load_process_images import getImages
 
-latent_dim = 8
+latent_dim = 16
 IMAGE_WIDTH = 64
 IMAGE_HEIGHT = 64
-CHANNELS = 3
+CHANNELS = 1
 
-decoder = load_model('models/decoder_2001.h5')
-encoder = load_model('models/encoder_2001.h5')
+decoder = load_model('models/decoder_00016_1.h5')
+encoder = load_model('models/encoder_00016_1.h5')
 
 imgs_list = []
 for i in getImages():
     imgs_list.append(i)
 
-imgs = getImages(return_single=True, use_all=False, val=True)
+imgs = getImages(return_single=True, use_all=True, val=True)
 
-im_size = 64
+im_size = IMAGE_HEIGHT
 
 while True:
     c = random.choice(range(0, imgs.shape[0]))
     img = imgs[c, :, :]
     print(c)
     #img = imgs[117]
-    img = img.reshape((1, 64, 64, 3))
+    img = img.reshape((1, IMAGE_WIDTH, IMAGE_HEIGHT, CHANNELS))
     encoded = np.asarray(encoder.predict(img))
     encoded_logvar = encoded[1, :, :]    #store log(var) vector for later
     encoded = encoded[0, :, :]   #get just means
@@ -43,7 +43,7 @@ while True:
     decoded = decoder.predict(encoded)
     n = 10
     grid_x = norm.ppf(np.linspace(0.05, 0.95, n))
-    figure = np.zeros((im_size*latent_dim, im_size * (n + 2), 3))
+    figure = np.zeros((im_size*latent_dim, im_size * (n + 2), CHANNELS))
     for i in range(latent_dim):
         figure[im_size*i:im_size*(i+1), 0:im_size, :] = img
         figure[im_size*i:im_size*(i+1), im_size:im_size*2, :] = decoded
@@ -54,5 +54,5 @@ while True:
             decoded_ = decoder.predict(encoded_)
             figure[im_size*i:im_size*(i+1), im_size*(j+2):im_size*(j+3), :] = decoded_
     plt.figure()
-    plt.imshow(figure)
+    plt.imshow(np.squeeze(figure), cmap='gray')
     plt.show()

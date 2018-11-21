@@ -15,11 +15,11 @@ from load_process_images import getImages
 LATENT_DIM = 8
 IMAGE_WIDTH = 64
 IMAGE_HEIGHT = 64
-CHANNELS = 3
-SIGMA_NOISE = 0.3
+CHANNELS = 1
+SIGMA_NOISE = 0.15
 
-decoder = load_model('models/decoder_208.h5')
-encoder = load_model('models/encoder_208.h5')
+decoder = load_model('models/decoder_00030.h5')
+encoder = load_model('models/encoder_00030.h5')
 
 imgs_list = []
 for i in getImages():
@@ -34,7 +34,7 @@ while True:
     img = imgs[c, :, :]
     print(c)
     #img = imgs[117]
-    img = img.reshape((1, 64, 64, 3))
+    img = img.reshape((1, IMAGE_WIDTH, IMAGE_HEIGHT, CHANNELS))
     encoded = np.asarray(encoder.predict(img))
     encoded_logvar = encoded[1, :, :]    #store log(var) vector for later
     encoded = encoded[0, :, :]   #get just means
@@ -44,7 +44,7 @@ while True:
     decoded = decoder.predict(encoded)
     n = 10
     grid_x = norm.ppf(np.linspace(0.05, 0.95, n))
-    figure = np.zeros((im_size*LATENT_DIM, im_size * (n + 2), 3))
+    figure = np.zeros((im_size*LATENT_DIM, im_size * (n + 2), CHANNELS))
     for i in range(LATENT_DIM):
         figure[im_size*i:im_size*(i+1), 0:im_size, :] = img
         figure[im_size*i:im_size*(i+1), im_size:im_size*2, :] = decoded
@@ -55,5 +55,5 @@ while True:
             decoded_ = decoder.predict(encoded_)
             figure[im_size*i:im_size*(i+1), im_size*(j+2):im_size*(j+3), :] = decoded_
     plt.figure()
-    plt.imshow(figure)
+    plt.imshow(np.squeeze(figure), cmap='gray')
     plt.show()

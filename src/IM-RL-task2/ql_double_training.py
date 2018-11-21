@@ -6,24 +6,24 @@ from keras.models import Sequential
 from keras.layers import Conv2D, Input, Dense, Flatten, Dropout
 from keras.optimizers import *
 from keras.models import Model, load_model, model_from_json
-from pointing_env import PointingEnv
+from arrow_env import ArrowEnv
 import matplotlib.pyplot as plt
 from mdn import MDN
 from model_tester import test_model
 
 IMAGE_WIDTH = 64
 IMAGE_HEIGHT = 64
-CHANNELS = 3
-LATENT_DIM = 8
+CHANNELS = 1
+LATENT_DIM = 16
 
 RE_MEMORY_CAPACITY = 10000
 IM_MEMORY_CAPACITY = 600
 ENV_BATCH_SIZE = 64
 GAMMA = 0.99
-MAX_EPSILON = 0.6  # 0.8
-MIN_EPSILON = 0.0001  # 0.0001
+MAX_EPSILON = 0.8  # 0.8
+MIN_EPSILON = 0.001  # 0.0001
 LAMBDA = 0.05  # speed of decay+
-MAX_EPISODES = 100
+MAX_EPISODES = 5000
 USE_TARGET = False
 UPDATE_TARGET_FREQUENCY = 5
 NUM_COMPONENTS = 48
@@ -35,17 +35,19 @@ episodes = 0
 SIGMA_NOISE = 0.15
 actionCnt = 0
 
-ENV_LEARN_START = 40  # number of episodes before training env model starts`
+ENV_LEARN_START = 100  # number of episodes before training env model starts`
 I_D = 8     #imaginary rollout depth (length of rollout)
 I_B = 50    #imaginary rollout breadth (number of rollouts)
-I_START = 50    # episode at which imaginary training starts
-MEM_BATCHSIZE = 256      #total batch size for replay
+I_START = 150    # episode at which imaginary training starts
+MEM_BATCHSIZE = 128      #total batch size for replay
 IM_PERCENT = 0.3        #percentage of total batch size that is imaginary transitions
 IM_BATCHSIZE = int(round(MEM_BATCHSIZE*IM_PERCENT))
 RE_BATCHSIZE = MEM_BATCHSIZE - IM_BATCHSIZE
 
-USE_IMAGINARY = True
+USE_IMAGINARY = False
 
+VAE_VER = '00016_1'
+MODEL_VER = '0001'
 
 def int2onehot(a, n):
     onehot = np.zeros(n)
@@ -58,7 +60,7 @@ class EnvironmentModel:
         self.z = None
         self.env_model = MDN(num_components=NUM_COMPONENTS, in_dim=LATENT_DIM + actionCnt, out_dim=LATENT_DIM)
         self.r_model = self._createModel()
-        self.decoder = load_model("models/decoder_2001.h5")
+        self.decoder = load_model("models/decoder_" + VAE_VER + ".h5")
         self.statecnt = LATENT_DIM
 
     def _createModel(selfself):
@@ -105,12 +107,12 @@ class Brain:
         self.controller, self.encoder, self.controller_target = self._createModel()
 
     def _createModel(self):
-        encoder = load_model('models/encoder_2001.h5')
+        encoder = load_model('models/encoder_' + VAE_VER + ".h5")
 
         controller_input = Input(shape=(LATENT_DIM,), name='controller_input')
-        controller_out = Dense(units=512, activation='relu')(controller_input)
+        controller_out = Dense(units=1024, activation='relu')(controller_input)
+        controller_out = Dense(units=512, activation='relu')(controller_out)
         controller_out = Dense(units=256, activation='relu')(controller_out)
-        # controller_out = Dense(units=32, activation='relu')(controller_out)
         # controller_out = Dense(units=16, activation='relu')(controller_out)
         controller_out = Dense(units=actionCnt, activation='linear')(controller_out)
         controller = Model(inputs=controller_input, outputs=controller_out)
@@ -278,7 +280,7 @@ r_history = np.zeros(MAX_EPISODES)
 
 class Environment:
     def __init__(self, num_items, use_all=False, val=False):
-        self.env = PointingEnv(num_items=num_items, use_all=use_all, val=val)
+        self.env = ArrowEnv(num_items=num_items, use_all=use_all, val=val)
 
     def run(self, agent):
         s = self.env.reset()
@@ -332,16 +334,17 @@ class Environment:
 
 # -------------------- MAIN ----------------------------
 num_items = 3;
-env = Environment(num_items=num_items, use_all=False, val=False)
+env = Environment(num_items=num_items, use_all=True, val=False)
 
 stateCnt = env.env.getStateSpaceSize()
 global actionCnt
 actionCnt = env.env.getActSpaceSize()
 
 
-max_runs = 10
+max_runs = 1
 runs = 0
 done_counts = []
+R_counts = []
 try:
     while runs < max_runs:
         episodes = 0
@@ -351,15 +354,21 @@ try:
             env.run(agent)
             episodes = episodes + 1
         #ss = 0  # blah blah
-        agent.brain.env_model.env_model.model.save("models/env_model_3001.h5")
-        agent.brain.env_model.r_model.save("models/r_model_3001.h5")
-        agent.brain.controller.save('models/controller_3001.h5')
+        agent.brain.env_model.env_model.model.save("models/env_model_" + MODEL_VER + ".h5")
+        agent.brain.env_model.r_model.save("models/r_model_" + MODEL_VER + ".h5")
+        agent.brain.controller.save('models/controller_' + MODEL_VER + ".h5")
         print("testing run ", runs+1)
-        done_counts.append(test_model(use_all=False, val=True))
+        d_cnt, R_cnt = test_model(VAE_VER, MODEL_VER, use_all=True, val=False)
+        done_counts.append(d_cnt)
+        R_counts.append(R_cnt)
         runs += 1
         #plt.plot(r_history)
         #plt.show()
 finally:
     done_counts = np.asarray(done_counts)
-    print("average = ", done_counts.mean(), "max = ", done_counts.max(), "min = ", done_counts.min(), "sigma = ", np.std(done_counts))
+    R_counts = np.asarray(R_counts)
+    print("Done counts: average = ", done_counts.mean(), "max = ", done_counts.max(), "min = ",
+          done_counts.min(), "sigma = ", np.std(done_counts))
+    print("R counts: average = ", R_counts.mean(), "max = ", R_counts.max(), "min = ",
+          R_counts.min(), "sigma = ", np.std(R_counts))
 # env.run(agent, False)

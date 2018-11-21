@@ -2,99 +2,74 @@
 '''
 
 import numpy as np
-import matplotlib.pyplot as plt
 import os
 import cv2
 import random
+import matplotlib.pyplot as plt
 
 IMAGE_WIDTH = 64
 IMAGE_HEIGHT = 64
-CHANNELS = 3
+CHANNELS = 1
 
 
-def processImage(img, gamma=0.5):
+def processImage(img, gamma=0.4):
     # original res = 240*320
-    image = img[80:230, 80:230]     # crop are of interest
-    image = cv2.resize(image, (IMAGE_WIDTH, IMAGE_HEIGHT))
+    #image = img[80:230, 80:230]     # crop are of interest
+    #image = cv2.resize(img, (IMAGE_WIDTH, IMAGE_HEIGHT), interpolation=cv2.INTER_AREA)
     # apply gamma correction
-    invGamma = 1.0 / gamma
-    table = np.array([((i / 255.0) ** invGamma) * 255
-                      for i in np.arange(0, 256)]).astype("uint8")
-    image = cv2.LUT(image, table)
-    # convert from BGR to RGB
-    b, g, r = cv2.split(image)
-    image = cv2.merge([r, g, b])
-    image = image.astype(float)/255.0     # normalize
+    #invGamma = 1.0 / gamma
+    #table = np.array([((i / 255.0) ** invGamma) * 255
+    #                  for i in np.arange(0, 256)]).astype("uint8")
+    #image = cv2.LUT(image, table)
+    # convert from BGR to greyscale
+    #b, g, r = cv2.split(image)
+    #image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    image = img.astype(float)/255.0     # normalize
     return image
 
 
 def getImages(return_single=False, use_all=True, val=False):
-    purple, blue, orange, pu_bl, pu_or, bl_pu, bl_or, or_pu, or_bl, pu_hand, bl_hand, or_hand \
-        = [], [], [], [], [], [], [], [], [], [], [], []
+    imgs = []   #imgs is a list of tuples, each tuple is a pair of list of images and the associated label
     if use_all:
-        path = '../../data/icub_pointing_1/'
+        path = '../../data/arrow_env/all/synthesized/'
     else:
-        if val:
-            path = '../../data/icub_pointing_1/split/val/'
+       if val:
+           path = '../../data/arrow_env/all/processed/val/'
+       else:
+           path = '../../data/arrow_env/all/processed/train/'
+    for dir in os.listdir(path):
+        subdir = os.path.join(path, dir)
+        sub_imgs = []
+        for filename in os.listdir(subdir):
+            img = cv2.imread(os.path.join(subdir, filename), cv2.CV_LOAD_IMAGE_GRAYSCALE)
+            if img is not None:
+                sub_imgs.append(processImage(np.reshape(img, (IMAGE_HEIGHT, IMAGE_WIDTH, CHANNELS))))
+        if return_single:
+            imgs = imgs + sub_imgs
         else:
-            path = '../../data/icub_pointing_1/split/train/'
-    for filename in os.listdir(path + 'purple'):
-        img = cv2.imread(os.path.join(path + 'purple', filename))
-        if img is not None:
-            purple.append(processImage(img))
-    for filename in os.listdir(path + 'blue'):
-        img = cv2.imread(os.path.join(path + 'blue', filename))
-        if img is not None:
-            blue.append(processImage(img))
-    for filename in os.listdir(path + 'orange'):
-        img = cv2.imread(os.path.join(path + 'orange', filename))
-        if img is not None:
-            orange.append(processImage(img))
-    for filename in os.listdir(path + 'pu_bl'):
-        img = cv2.imread(os.path.join(path + 'pu_bl', filename))
-        if img is not None:
-            pu_bl.append(processImage(img))
-    for filename in os.listdir(path + 'pu_or'):
-        img = cv2.imread(os.path.join(path + 'pu_or', filename))
-        if img is not None:
-            pu_or.append(processImage(img))
-    for filename in os.listdir(path + 'bl_pu'):
-        img = cv2.imread(os.path.join(path + 'bl_pu', filename))
-        if img is not None:
-            bl_pu.append(processImage(img))
-    for filename in os.listdir(path + 'bl_or'):
-        img = cv2.imread(os.path.join(path + 'bl_or', filename))
-        if img is not None:
-            bl_or.append(processImage(img))
-    for filename in os.listdir(path + 'or_pu'):
-        img = cv2.imread(os.path.join(path + 'or_pu', filename))
-        if img is not None:
-            or_pu.append(processImage(img))
-    for filename in os.listdir(path + 'or_bl'):
-        img = cv2.imread(os.path.join(path + 'or_bl', filename))
-        if img is not None:
-            or_bl.append(processImage(img))
-    for filename in os.listdir(path + 'pu_hand'):
-        img = cv2.imread(os.path.join(path + 'pu_hand', filename))
-        if img is not None:
-            pu_hand.append(processImage(img))
-    for filename in os.listdir(path + 'bl_hand'):
-        img = cv2.imread(os.path.join(path + 'bl_hand', filename))
-        if img is not None:
-            bl_hand.append(processImage(img))
-    for filename in os.listdir(path + 'or_hand'):
-        img = cv2.imread(os.path.join(path + 'or_hand', filename))
-        if img is not None:
-            or_hand.append(processImage(img))
+            imgs.append((dir, sub_imgs))
+
     if return_single:
-        return np.asarray(purple + blue + orange + pu_bl + pu_or + bl_pu + bl_or + or_pu + or_bl + pu_hand + bl_hand + or_hand)
+        return np.asarray(imgs)
     else:
-        return purple, blue, orange, pu_bl, pu_or, bl_pu, bl_or, or_pu, or_bl, pu_hand, bl_hand, or_hand
+        return imgs
+    #else:
+    #    return purple, blue, orange, pu_bl, pu_or, bl_pu, bl_or, or_pu, or_bl, pu_hand, bl_hand, or_hand
 
 
-# testing
-#imgs = getImages(return_single=True)
-#while True:
-    #img = random.choice(imgs)
-    #plt.imshow(img)
-    #plt.show()
+
+def test():
+    imgs_list = getImages(return_single=True, use_all=True)
+    img_dict = dict(imgs_list)
+    imgs = img_dict['UUU0']
+    while True:
+        # imgs_tuple = random.choice(imgs_list)
+        # imgs = imgs_tuple[0]
+        img = random.choice(imgs)
+        img = img * 255
+        plt.imshow(img.astype(int), cmap='gray')
+        plt.show()
+
+
+if __name__ == "__main__":
+    test()

@@ -8,10 +8,11 @@ import random
 from load_process_images import getImages
 from enum import Enum
 import matplotlib.pyplot as plt
+import cv2
 
 IMAGE_WIDTH = 64
 IMAGE_HEIGHT = 64
-IMAGE_STACK = 2
+CHANNELS = 1
 
 class ArrowEnv:
     def __init__(self, num_items=3, use_all=True, val=False, stochastic_gestures=False, stochastic_dynamics=False):
@@ -21,10 +22,7 @@ class ArrowEnv:
         self.stoch_gest = stochastic_gestures
         self.stoch_dyn = stochastic_dynamics
         self.stoch_gest_prob = 0.1
-        #TODO: write getImages()
-        #self.purple, self.blue, self.orange, self.pu_bl, self.pu_or, self.bl_pu, self.bl_or, self.or_pu, self.or_bl,\
-            #self.pu_hand, self.bl_hand, self.or_hand = getImages(return_single=False ,use_all=use_all, val=val)
-
+        self.imgs_dict = dict(getImages(return_single=False, use_all=use_all, val=val))
 
     def reset(self):
         #self.arrow_state is the internal state.
@@ -32,7 +30,7 @@ class ArrowEnv:
         # arrow states key: 0 = U, 1 = L, 2 = D, 3 = R
         # gest_state is which arrow is being pointed to
         self.arrow_state = []
-        self.arrow_state = random.sample(range(self.num_items), 3)
+        self.arrow_state = random.sample(range(self.num_items), 3)  #samples with no replacement to guarantee unique config
         self.gest_state = random.choice(range(self.num_items))
         while self._isSolved(): # avoid having the initial state already solved on reset
             self.gest_state = random.choice(range(self.num_items))
@@ -84,14 +82,15 @@ class ArrowEnv:
 
     def _generateState(self):
         # returns observable state
-        state = list(self.arrow_state)
-        return state.append(self.gest_state)
+        state = self._getStateString()
+        imgs = self.imgs_dict[state]
+        return random.choice(imgs)
 
     def printState(self):
         print ("State: " + self._getStateString())
 
     def getStateSpaceSize(self):
-        return ( IMAGE_WIDTH, IMAGE_HEIGHT, 3)
+        return (IMAGE_WIDTH, IMAGE_HEIGHT, CHANNELS)
 
     def getActSpaceSize(self):
         return self.num_items*2
@@ -114,16 +113,30 @@ class ArrowEnv:
         return state_str
 
 
-testEnv = ArrowEnv(stochastic_gestures=True)
-s = testEnv.reset()
-testEnv.printState()
-ip = 0
-while(ip <= testEnv.getActSpaceSize()):
-    ip = int(raw_input('Enter action:'))
-    s, r, d = testEnv.step(ip)
+def test():
+    testEnv = ArrowEnv(stochastic_gestures=True)
+    s = testEnv.reset()
     testEnv.printState()
-    if d:
-        s = testEnv.reset()
-        print ("resetting...")
+    cv2.namedWindow('image', cv2.WINDOW_NORMAL)
+    cv2.imshow('image', s)
+    cv2.waitKey(10)
+    ip = 0
+    while (ip <= testEnv.getActSpaceSize()):
+        ip = int(raw_input('Enter action:'))
+        s, r, d = testEnv.step(ip)
         testEnv.printState()
+        print('reward = ', r, 'done = ', d)
+        cv2.imshow('image', s)
+        cv2.waitKey(10)
+        if d:
+            s = testEnv.reset()
+            print ("resetting...")
+            testEnv.printState()
+            cv2.imshow('image', s)
+            cv2.waitKey(10)
+
+
+if __name__ == "__main__":
+    test()
+
 
