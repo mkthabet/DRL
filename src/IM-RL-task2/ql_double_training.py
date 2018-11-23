@@ -14,39 +14,39 @@ from model_tester import test_model
 IMAGE_WIDTH = 64
 IMAGE_HEIGHT = 64
 CHANNELS = 1
-LATENT_DIM = 16
+LATENT_DIM = 8
 
 RE_MEMORY_CAPACITY = 10000
 IM_MEMORY_CAPACITY = 600
-ENV_BATCH_SIZE = 64
+ENV_BATCH_SIZE = 256
 GAMMA = 0.99
 MAX_EPSILON = 0.8  # 0.8
 MIN_EPSILON = 0.001  # 0.0001
-LAMBDA = 0.05  # speed of decay+
+LAMBDA = 0.03  # speed of decay+
 MAX_EPISODES = 5000
 USE_TARGET = False
 UPDATE_TARGET_FREQUENCY = 5
-NUM_COMPONENTS = 48
-R_ENV = 32 #number of env training batches for each episode
-R_C = 4    #number of updates per step for controller
+NUM_COMPONENTS = 5
+R_ENV = 4 #number of env training batches for each episode
+R_C = 1    #number of updates per step for controller
 epsilon_std = 1.0
 BETA = 0.0
 episodes = 0
-SIGMA_NOISE = 0.15
+SIGMA_NOISE = 4
 actionCnt = 0
 
-ENV_LEARN_START = 100  # number of episodes before training env model starts`
+ENV_LEARN_START = 10  # number of episodes before training env model starts`
 I_D = 8     #imaginary rollout depth (length of rollout)
 I_B = 50    #imaginary rollout breadth (number of rollouts)
-I_START = 150    # episode at which imaginary training starts
-MEM_BATCHSIZE = 128      #total batch size for replay
-IM_PERCENT = 0.3        #percentage of total batch size that is imaginary transitions
+I_START = 1000    # episode at which imaginary training starts
+MEM_BATCHSIZE = 64      #total batch size for replay
+IM_PERCENT = 0.0        #percentage of total batch size that is imaginary transitions
 IM_BATCHSIZE = int(round(MEM_BATCHSIZE*IM_PERCENT))
 RE_BATCHSIZE = MEM_BATCHSIZE - IM_BATCHSIZE
 
 USE_IMAGINARY = False
 
-VAE_VER = '00016_1'
+VAE_VER = '0008_1'
 MODEL_VER = '0001'
 
 def int2onehot(a, n):
@@ -65,8 +65,9 @@ class EnvironmentModel:
 
     def _createModel(selfself):
         r_model_input = Input(shape=(LATENT_DIM + actionCnt,), name='r_in')
-        r_model_out = Dense(units=512, activation='relu', name='r_dense1')(r_model_input)
-        r_model_out = Dense(units=256, activation='relu', name='r_dense2')(r_model_out)
+        r_model_out = Dense(units=1024, activation='relu', name='r_dense1')(r_model_input)
+        r_model_out = Dense(units=512, activation='relu', name='r_dense2')(r_model_out)
+        r_model_out = Dense(units=256, activation='relu', name='r_dense3')(r_model_out)
         r_out = Dense(units=1, name='r_out', activation='linear')(r_model_out)
         d_out = Dense(units=1, activation='sigmoid', name='d_out')(r_model_out)
         r_model = Model(r_model_input, [r_out, d_out])
@@ -92,7 +93,7 @@ class EnvironmentModel:
 
         return self.z, r, done
 
-    def train_env(self, x, y, epoch=1, verbose=0):
+    def train_env(self, x, y, epoch=1, verbose=1):
         self.env_model.train_model(x, y, batch_size=ENV_BATCH_SIZE, epoch=epoch, verbose=verbose)
 
     def train_r(self, x, y, epoch=1, verbose=0):
@@ -139,13 +140,15 @@ class Brain:
         return self.predict(s.reshape(1, LATENT_DIM), target).flatten()
 
     def encode(self, s):
-        p_z = np.asarray(self.encoder.predict(s))
-        return p_z[0, 0, :]
+        p_z = np.asarray(self.encoder.predict(s)) #shape = [num_outputs, num_batches_ dim]
+        z = p_z[0, 0, :]
+        sigma = np.sqrt(np.exp(p_z[1, 0, :]))
+        return z, sigma
 
     def updateTargetModel(self):
         self.controller_target.set_weights(self.controller.get_weights())
 
-    def train_env(self, x, y, epoch=1, verbose=0):
+    def train_env(self, x, y, epoch=1, verbose=1):
         self.env_model.train_env(x, y, epoch=epoch, verbose=verbose)
 
     def train_r(self, x, y, epoch=1, verbose=0):
@@ -210,11 +213,24 @@ class Agent:
 
         no_state = np.zeros(LATENT_DIM)
 
+
+        #z = np.array([o[0] for o in batch])
+        #z_= np.array([o[3] for o in batch])
+        #sigma = np.array([o[5] for o in batch])
         #states = np.array([o[0] for o in batch])
+        #states_ = np.array([o[3] for o in batch])
         #states_ = np.array([(no_state if o[3] is None else o[3]) for o in batch])
 
-        states = np.array([(o[0] + np.random.normal(loc=0, scale=SIGMA_NOISE, size=LATENT_DIM)) for o in batch])
-        states_ = np.array([(no_state if o[3] is None else o[3] + np.random.normal(loc=0, scale=SIGMA_NOISE, size=LATENT_DIM)) for o in batch])
+        #states = np.array([(o[0] + np.random.normal(loc=0, scale=SIGMA_NOISE, size=LATENT_DIM)) for o in batch])
+        #states_ = np.array([(no_state if o[3] is None else o[3] + np.random.normal(loc=0, scale=SIGMA_NOISE, size=LATENT_DIM)) for o in batch])
+
+        #states = np.array([(np.random.normal(loc=o[0], scale=o[5], size=LATENT_DIM)) for o in batch])
+        #states_ = np.array(
+         #   [(no_state if o[3] is None else np.random.normal(loc=o[3], scale=o[6], size=LATENT_DIM)) for o in batch])
+        #states_ = np.array([(no_state if o[3] is None else o[3]) for o in batch])
+
+        states = np.array([(np.random.normal(loc=o[0], scale=o[5], size=LATENT_DIM)) for o in batch])
+        states_ = np.array([np.random.normal(loc=o[3], scale=o[6], size=LATENT_DIM) for o in batch])
 
         x_env = np.zeros((len(batch), LATENT_DIM + actionCnt))
         y_env_s = np.zeros((len(batch), LATENT_DIM))
@@ -239,14 +255,15 @@ class Agent:
 
     def replay(self, imaginary=False):
         batch = self.memory.sample(RE_BATCHSIZE)
-        if imaginary:
+        if imaginary and (episodes >= I_START):
             batch = batch + self.imaginary_memory.sample(IM_BATCHSIZE)
 
         batchLen = len(batch)
         no_state = np.zeros(LATENT_DIM)
 
         states = np.array([o[0] for o in batch])
-        states_ = np.array([(no_state if o[3] is None else o[3]) for o in batch])
+        states_ = np.array([o[3] for o in batch])
+        #states_ = np.array([(no_state if o[3] is None else o[3]) for o in batch])
 
         p = agent.brain.predict(states)
         p_ = agent.brain.predict(states_, target=USE_TARGET)
@@ -264,7 +281,7 @@ class Agent:
 
             t = p[i]
             # print (t)
-            if s_ is None:
+            if done:
                 t[a] = r
             else:
                 t[a] = r + GAMMA * np.amax(p_[i])
@@ -292,7 +309,7 @@ class Environment:
             imaginary = True    #start using imaginary rollouts
         # TODO: decide if imaginary or not
         while True:
-            z = agent.brain.encode(np.reshape(s, (1, IMAGE_WIDTH, IMAGE_HEIGHT, CHANNELS)))
+            z, sigma = agent.brain.encode(np.reshape(s, (1, IMAGE_WIDTH, IMAGE_HEIGHT, CHANNELS)))
             a = agent.act(z)
             # print('a = ', a)
             if imaginary:
@@ -302,20 +319,20 @@ class Environment:
                     for i_d in range(I_D):
                         zhat_, rhat, donehat = agent.brain.env_model.step(a)
                         rhat, donehat = round(rhat), round(donehat)
-                        if donehat == 1:
-                            zhat_ = None
+                        #if donehat == 1:
+                         #   zhat_ = None
                         agent.observe((zhat, a, rhat, zhat_, donehat), imaginary=True)
                         if donehat == 1:
                             break
                         zhat = zhat_
             s_, r, done = self.env.step(a)
-            z_ = agent.brain.encode(np.reshape(s_, (1, IMAGE_WIDTH, IMAGE_HEIGHT, CHANNELS)))
+            z_, sigma_ = agent.brain.encode(np.reshape(s_, (1, IMAGE_WIDTH, IMAGE_HEIGHT, CHANNELS)))
 
-            if done:  # terminal state
-                z_ = None
+            #if done:  # terminal state
+             #   z_ = None
 
-            agent.observe((z, a, r, z_, done), imaginary=False)
-            if (episodes > I_START) and (episodes >= ENV_LEARN_START) and (USE_IMAGINARY==True):
+            agent.observe((z, a, r, z_, done, sigma, sigma_), imaginary=False)
+            if (episodes >= ENV_LEARN_START) and (USE_IMAGINARY==True):
                 for i in range(R_ENV):
                     agent.train_env()
 
@@ -345,6 +362,7 @@ max_runs = 1
 runs = 0
 done_counts = []
 R_counts = []
+
 try:
     while runs < max_runs:
         episodes = 0
@@ -371,4 +389,3 @@ finally:
           done_counts.min(), "sigma = ", np.std(done_counts))
     print("R counts: average = ", R_counts.mean(), "max = ", R_counts.max(), "min = ",
           R_counts.min(), "sigma = ", np.std(R_counts))
-# env.run(agent, False)

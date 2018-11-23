@@ -21,11 +21,11 @@ from load_process_images import getImages
 
 
 def train_vae():
-    for latent_dim in (16, 32):
+    for latent_dim in (64, 8):
         for BETA in (1, 2, 4, 8):
             batch_size = 2000
             #latent_dim = 32
-            epochs = 200
+            epochs = 500
             epsilon_std = 1.0
             #BETA = 2
             IMAGE_WIDTH = 64

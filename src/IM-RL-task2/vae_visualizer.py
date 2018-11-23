@@ -12,14 +12,14 @@ from sklearn.manifold import TSNE
 from keras.models import load_model
 from load_process_images import getImages
 
-LATENT_DIM = 8
+LATENT_DIM = 32
 IMAGE_WIDTH = 64
 IMAGE_HEIGHT = 64
 CHANNELS = 1
-SIGMA_NOISE = 0.15
+SIGMA_NOISE = 0.05
 
-decoder = load_model('models/decoder_00030.h5')
-encoder = load_model('models/encoder_00030.h5')
+decoder = load_model('models/decoder_00032_1.h5')
+encoder = load_model('models/encoder_00032_1.h5')
 
 imgs_list = []
 for i in getImages():

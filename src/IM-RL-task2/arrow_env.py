@@ -67,7 +67,7 @@ class ArrowEnv:
         elif self._isSolved():   # only arrow pointed to is up
             reward = 50
             done = 1
-            print("Solved!")
+            print("Solved!#############################################")
         else:
             reward = -1
 

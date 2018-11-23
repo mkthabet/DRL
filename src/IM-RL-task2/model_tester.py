@@ -16,8 +16,7 @@ from arrow_env import ArrowEnv
 IMAGE_WIDTH = 64
 IMAGE_HEIGHT = 64
 CHANNELS = 1
-LATENT_DIM = 16
-sortedCnt = 0
+LATENT_DIM = 8
 
 VAE_VER = '00016_1'
 MODEL_VER = '0001'
@@ -96,7 +95,7 @@ class Environment:
 
 #-------------------- MAIN ----------------------------
 
-def test_model(vae_ver, model_ver, use_all=False, val=True, ):
+def test_model(vae_ver, model_ver, use_all=False, val=True):
     global VAE_VER
     global MODEL_VER
     VAE_VER = vae_ver
@@ -115,6 +114,8 @@ def test_model(vae_ver, model_ver, use_all=False, val=True, ):
     MAX_EPISODES = 1000
     MAX_RUNS = 1
     total_done_cnt = 0
+    global R_total
+    R_total = 0
     while runs < MAX_RUNS:
         while episodes < MAX_EPISODES:
             env.run(agent)
@@ -126,7 +127,7 @@ def test_model(vae_ver, model_ver, use_all=False, val=True, ):
         done_cnt = 0
         episodes = 0
     avg_done_cnt = total_done_cnt*100 / (MAX_RUNS*MAX_EPISODES)
-    avg_R = R_total / (MAX_RUNS*MAX_EPISODES)
+    avg_R = R_total / (total_done_cnt)
     return avg_done_cnt, avg_R
     # env.run(agent, False)
     #print('Average done count: ', avg_done_cnt)

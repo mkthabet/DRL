@@ -14,7 +14,7 @@ IN_DIM = 1
 OUT_DIM = 1
 NUM_COMPONENTS = 24
 BATCH_SIZE = 2500
-BETA = 0.5
+BETA = 0.1
 EPSILON = 1e-8
 
 
@@ -77,15 +77,17 @@ class MDN:
         model_input = Input(shape=(self.in_dim,), name='mdn_in')
         #model_out = BatchNormalization()(model_input)
         #model_out = Dense(units=256, activation='relu', name='mdn_dense1')(model_out)
-        model_out = Dense(units=256, activation='relu', name='mdn_dense1')(model_input)
-        model_out = Dense(units=256, activation='relu', name='mdn_dense2')(model_out)
+        model_out = Dense(units=1024, activation='relu', name='mdn_dense1')(model_input)
+        model_out = Dense(units=512, activation='relu', name='mdn_dense2')(model_out)
         model_out = Dense(units=256, activation='relu', name='mdn_dense3')(model_out)
+        #model_out = Dense(units=256, activation='relu', name='mdn_dense4')(model_out)
+        #model_out = Dense(units=128, activation='relu', name='mdn_dense5')(model_out)
         out_pi = Dense(units=self.num_components, activation='softmax', name='out_pi')(model_out)
         out_mu = Dense(units=self.out_dim * self.num_components, name='out_mu')(model_out)
         out_sigma = Dense(units=self.out_dim * self.num_components, name='out_sigma')(model_out)
         out_concat = Concatenate()([out_mu, out_sigma, out_pi])
         model = Model(inputs=model_input, outputs=out_concat)
-        opt = Adam(lr=0.001)
+        opt = Nadam(lr=0.001)
         model.compile(loss=mdn_loss(numComponents=self.num_components, outputDim=self.out_dim), optimizer=opt)
         # model_train.summary()
         return model

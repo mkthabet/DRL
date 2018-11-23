@@ -10,12 +10,16 @@ from keras.models import Model, load_model
 import matplotlib.pyplot as plt
 from load_process_images import getImages
 from mdn import MDN
+import cv2
 
 IMAGE_WIDTH = 64
 IMAGE_HEIGHT = 64
-CHANNELS = 3
+CHANNELS = 1
 LATENT_DIM = 8
-NUM_COMPONENTS = 48
+NUM_COMPONENTS = 5
+
+VAE_VER = '0008_1'
+MODEL_VER = '0001'
 
 def int2onehot(a, n):
     onehot = np.zeros(n)
@@ -28,161 +32,111 @@ def onehot2int(onehot):
 def mse(x,y):
     return ((x-y)**2).mean()
 
-class PointingEnv:
-    def __init__(self, num_items = 3):
+class ArrowEnv:
+    def __init__(self, num_items=3, use_all=True, val=False, stochastic_gestures=False, stochastic_dynamics=False):
+        self.arrow_state = []
+        self.gest_state = None
         self.num_items = num_items
-        self.purple, self.blue, self.orange, self.pu_bl, self.pu_or, self.bl_pu, self.bl_or, self.or_pu, self.or_bl, \
-        self.pu_hand, self.bl_hand, self.or_hand = getImages()
-
-        self.env_model = MDN(num_components=NUM_COMPONENTS, in_dim=LATENT_DIM+4, out_dim=LATENT_DIM,
-                             model_path="models/env_model_2001.h5")
-        self.encoder = load_model("models/encoder_208.h5")
-        self.dqn_model = load_model('models/controller_2001.h5')
-        self.decoder = load_model("models/decoder_208.h5")
-        self.r_model = load_model("models/r_model_2001.h5")
-
+        self.stoch_gest = stochastic_gestures
+        self.stoch_dyn = stochastic_dynamics
+        self.stoch_gest_prob = 0.1
+        self.imgs_dict = dict(getImages(return_single=False, use_all=use_all, val=val))
         self.s_bar = None
 
+        self.env_model = MDN(num_components=NUM_COMPONENTS, in_dim=LATENT_DIM + 6, out_dim=LATENT_DIM,
+                             model_path="models/env_model_" + MODEL_VER + ".h5")
+        self.encoder = load_model('models/encoder_' + VAE_VER + ".h5")
+        self.dqn_model = load_model('models/controller_' + MODEL_VER + ".h5")
+        self.decoder = load_model("models/decoder_" + VAE_VER + ".h5")
+        self.r_model = load_model("models/r_model_" + MODEL_VER + ".h5")
 
     def reset(self):
-        #self.state is the internal state.
-        #self.state = random.randint(0,1) #0 = b, 1 = g, 2 = b_only, 3 = g_only,
-        self.state = random.choice([0, 1, 2])
-        #self.state = 0
+        #self.arrow_state is the internal state.
+        # numbers in the arrow_state list are the states of the arrows
+        # arrow states key: 0 = U, 1 = L, 2 = D, 3 = R
+        # gest_state is which arrow is being pointed to
+        self.arrow_state = []
+        self.arrow_state = random.sample(range(self.num_items), 3)  #samples with no replacement to guarantee unique config
+        self.gest_state = random.choice(range(self.num_items))
+        while self._isSolved(): # avoid having the initial state already solved on reset
+            self.gest_state = random.choice(range(self.num_items))
         return self._generateState()
 
 
     def step(self, action):
-        assert action < self.getActSpaceSize() and action >= 0, "action cannot exceed number of items +1 or be less than 0, action = %r" % action
+        #actions key: each 2 successive values represent rotating an object counerCW or CW respectively.
+        #exanple: 0 = rotate item 0 CCW, 1 = rotate item 1 CW, 2 = rotate item 1 CCW etc...
+
+        assert action<self.getActSpaceSize() and action>=0, \
+            "action cannot exceed num_items*2 or be less than 0, action = %r" % action
 
         done = 0
 
-        if self.state == 0:
-            if action == 0:
-                self.state = random.choice([5, 7, 9])
-                #self.state = 7
-                reward = 1
-            else:
-                reward = -1
-                done = 1
-                print 'mistake.....'
-        elif self.state == 1:
-            if action == 1:
-                self.state = random.choice([3, 8, 10])
-                reward = 1
-            else:
-                reward = -1
-                done = 1
-                print 'mistake.....'
-        elif self.state == 2:
-            if action == 2:
-                self.state = random.choice([4, 6, 11])
-                #self.state = 11
-                reward = 1
-            else:
-                reward = -1
-                done = 1
-                print 'mistake.....'
-        elif self.state == 3:
-            if action == 1:
-                self.state = 0
-                reward = 0
-            else:
-                done = 1
-                reward = -1
-                print 'mistake.....'
-        elif self.state == 4:
-            if action == 2:
-                self.state = 0
-                reward = 0
-            else:
-                done = 1
-                reward = -1
-                print 'mistake.....'
-        elif self.state == 5:
-            if action == 0:
-                self.state = 1
-                reward = 0
-            else:
-                done = 1
-                reward = -1
-                print 'mistake.....'
-        elif self.state == 6:
-            if action == 2:
-                self.state = 1
-                reward = 0
-            else:
-                done = 1
-                reward = -1
-                print 'mistake.....'
-        elif self.state == 7:
-            if action == 0:
-                self.state = 2
-                reward = 0
-            else:
-                done = 1
-                reward = -1
-                print 'mistake.....'
-        elif self.state == 8:
-            if action == 1:
-                self.state = 2
-                reward = 0
-            else:
-                done = 1
-                reward = -1
-                print 'mistake.....'
-        elif self.state == 9 or self.state == 10 or self.state == 11:
-            if action == 3:
-                done = 1
-                reward = 5
-                print 'DONE#####################'
-            else:
-                done = 1
-                reward = -1
-                print 'mistake.....'
+        if action == 0:
+            self.arrow_state[0] = (self.arrow_state[0] + 1) % 4
+        elif action == 1:
+            self.arrow_state[0] = (self.arrow_state[0] - 1) % 4
+        elif action == 2:
+            self.arrow_state[1] = (self.arrow_state[1] + 1) % 4
+        elif action == 3:
+            self.arrow_state[1] = (self.arrow_state[1] - 1) % 4
+        elif action == 4:
+            self.arrow_state[2] = (self.arrow_state[2] + 1) % 4
+        elif action == 5:
+            self.arrow_state[2] = (self.arrow_state[2] - 1) % 4
+
+        # now compute reward
+        if len(self.arrow_state) > len(set(self.arrow_state)):  # non-unique config
+            reward = -10
+            done = 1
+            print("Non-unique config!")
+        elif self._isSolved():   # only arrow pointed to is up
+            reward = 50
+            done = 1
+            print("Solved!")
+        else:
+            reward = -1
+
+        # pointing has a random chance to change
+        if self.stoch_gest and (random.random() <= self.stoch_gest_prob) and (done != 1):
+            gest_aslist = []
+            gest_aslist.append(self.gest_state)
+            self.gest_state = random.choice(list(set(range(self.num_items)) - set(gest_aslist)))
+            # set difference makes sure the new gesture is different
 
         return self._generateState(), reward, done
 
     def _generateState(self):
-        # 0 = b, 1 = g, 2 = b_only, 3 = g_only, 4 = b_hand, 5 = g_hand
-        #print 'state = ' , self.state
-        if self.state == 0:
-            return random.choice(self.purple)
-        elif self.state == 1:
-            return random.choice(self.blue)
-        elif self.state == 2:
-            return random.choice(self.orange)
-        elif self.state == 3:
-            return random.choice(self.pu_bl)
-        elif self.state == 4:
-            return random.choice(self.pu_or)
-        elif self.state == 5:
-            return random.choice(self.bl_pu)
-        elif self.state == 6:
-            return random.choice(self.bl_or)
-        elif self.state == 7:
-            return random.choice(self.or_pu)
-        elif self.state == 8:
-            return random.choice(self.or_bl)
-        elif self.state == 9:
-            return random.choice(self.pu_hand)
-        elif self.state == 10:
-            return random.choice(self.bl_hand)
-        elif self.state == 11:
-            return random.choice(self.or_hand)
-
+        # returns observable state
+        state = self._getStateString()
+        imgs = self.imgs_dict[state]
+        return random.choice(imgs)
 
     def printState(self):
-        state = self._generateState()
-        stateArr = np.array(state)
-        print "state = %s" % stateArr.T
+        print ("State: " + self._getStateString())
 
     def getStateSpaceSize(self):
-        return ( IMAGE_WIDTH, IMAGE_HEIGHT, 3)
+        return (IMAGE_WIDTH, IMAGE_HEIGHT, CHANNELS)
 
     def getActSpaceSize(self):
-        return self.num_items+1
+        return self.num_items*2
 
+    def _isSolved(self):
+        return self.arrow_state[self.gest_state] == 0
+
+    def _getStateString(self):
+        state_str = ''
+        for i in range(len(self.arrow_state)):
+            if self.arrow_state[i] == 0:
+                state_str += 'U'
+            elif self.arrow_state[i] == 1:
+                state_str += 'L'
+            elif self.arrow_state[i] == 2:
+                state_str += 'D'
+            elif self.arrow_state[i] == 3:
+                state_str += 'R'
+        state_str += str(self.gest_state)
+        return state_str
     def encode(self, s):
         encoded = np.asarray(self.encoder.predict(np.reshape(s, (1, IMAGE_WIDTH, IMAGE_HEIGHT, CHANNELS))))
         return encoded[0, 0, :]
@@ -198,7 +152,7 @@ class PointingEnv:
         #print s_a.shape
         mu, sigma, pi = self.env_model.get_dist_params(s_a.reshape(1, -1))
         #print('model out = ', model_out)
-        #print('coefficients = ', pi)
+        print('coefficients = ', pi)
         component = np.random.choice(np.arange(0, NUM_COMPONENTS, 1), p=pi.flatten())
         mu = mu[0, component, :]
         sigma = sigma[0, component, :]
@@ -224,7 +178,7 @@ class PointingEnv:
         return np.argmax(out)
 
 
-testEnv = PointingEnv()
+testEnv = ArrowEnv()
 s = testEnv.reset()
 s_hat = testEnv.model_reset(s)
 d = d_hat = 0
@@ -235,8 +189,9 @@ misclass_r = 0
 misclass_d = 0
 im_size = 64
 figure = np.zeros((im_size, im_size, 3))
+cv2.namedWindow('image', cv2.WINDOW_NORMAL)
 while(episodes < MAX_EPISODES):
-    if round(d_hat) == 1:
+    if round(d_hat) == 2:
         #print 'new episode'
         episodes = episodes + 1
         d_hat = 0
@@ -249,12 +204,12 @@ while(episodes < MAX_EPISODES):
     #print('s_hat', s_hat)
 
     #a = testEnv.act(testEnv.encode(s))
-    a = testEnv.act(s_hat)
+    cv2.imshow('image', figure)
+    cv2.waitKey(10)
+    a = int(raw_input('Enter action:'))
+    if a > 5:
+        a = testEnv.act(s_hat)
     print ('z = ', s_hat, 'a = ', a)
-    plt.figure()
-    plt.imshow(figure)
-    plt.axis('off')
-    plt.show()
     #s, r, d = testEnv.step(a)
     #s_hat, r_hat, d_hat = testEnv.model_step(a)
     s_hat, r_hat, d_hat = testEnv.model_step(a)
@@ -270,6 +225,7 @@ while(episodes < MAX_EPISODES):
         #misclass_d += 1
     #log.append([mse(testEnv.encode(s), s_hat), mse(r, r_hat), mse(d, d_hat)])
 #print 'misclass(r) = ', misclass_r, ' , misclass(d) = ', misclass_d
+
 
 
 
